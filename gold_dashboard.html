@@ -538,6 +538,55 @@ footer a:hover { opacity:1; }
   text-transform: uppercase; letter-spacing: 2px;
   margin-bottom: 10px; padding-left: 2px;
 }
+
+/* ─── INSTALL PROMPT (PWA) ─── */
+.install-fab {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  display: none;
+  align-items: center; gap: 10px;
+  background: linear-gradient(135deg, var(--cyan), #0080c0);
+  color: #001a26; font-weight: 700; font-size: 13px;
+  padding: 12px 18px; border-radius: 30px;
+  border: none; cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0,212,255,0.35), 0 0 0 1px rgba(0,212,255,0.15);
+  z-index: 9999;
+  animation: slideIn .4s ease-out;
+  font-family: inherit;
+}
+.install-fab:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,212,255,0.5); }
+.install-fab .ico { font-size: 16px; }
+.install-fab .x   {
+  margin-left: 4px; padding: 0 4px;
+  opacity: .55; font-weight: 400; font-size: 18px; line-height: 1;
+}
+.install-fab .x:hover { opacity: 1; }
+@keyframes slideIn {
+  from { transform: translateY(80px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ios-install-modal {
+  position: fixed; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  z-index: 10000; padding: 20px;
+}
+.ios-install-modal.show { display: flex; }
+.ios-install-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 24px; max-width: 360px;
+  color: var(--text);
+}
+.ios-install-card h3 { margin: 0 0 8px; font-size: 16px; color: var(--cyan); }
+.ios-install-card p  { margin: 0 0 12px; font-size: 13px; color: var(--text2); line-height: 1.5; }
+.ios-install-card ol { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.7; }
+.ios-install-card .close-btn {
+  margin-top: 16px; width: 100%;
+  background: var(--cyan); color: #001a26;
+  border: none; border-radius: 8px; padding: 10px;
+  font-weight: 700; cursor: pointer; font-family: inherit;
+}
 </style>
 </head>
 <body>
@@ -809,6 +858,26 @@ footer a:hover { opacity:1; }
 
 </div><!-- .page -->
 
+<!-- ── INSTALL PROMPT (PWA) ── -->
+<button class="install-fab" id="installFab" type="button">
+  <span class="ico">📲</span>
+  <span>Install App</span>
+  <span class="x" id="installDismiss" title="Dismiss">×</span>
+</button>
+
+<div class="ios-install-modal" id="iosInstallModal">
+  <div class="ios-install-card">
+    <h3>📲 Install on iPhone</h3>
+    <p>Get the dashboard as an app on your home screen:</p>
+    <ol>
+      <li>Tap the <b>Share</b> button (square with up arrow) in Safari's bottom toolbar</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b></li>
+      <li>Tap <b>Add</b> in the top right</li>
+    </ol>
+    <button class="close-btn" id="iosModalClose">Got it</button>
+  </div>
+</div>
+
 <script>
 /* ══════════════════════════════════════════════════════
    CONFIG
@@ -818,6 +887,76 @@ const API_URL      = "/api/performance";
 const ACCOUNTS_URL = "/api/accounts";
 const POLL_MS      = 8000;
 const LS_KEY_ACCT  = "tc_active_account";
+const LS_KEY_INST  = "tc_install_dismissed_at";
+
+/* ══════════════════════════════════════════════════════
+   PWA INSTALL PROMPT
+══════════════════════════════════════════════════════ */
+let deferredInstallPrompt = null;
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+                  || window.navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+function shouldShowInstall() {
+  if (isStandalone) return false;
+  // Re-show after 7 days if dismissed
+  const dismissed = parseInt(localStorage.getItem(LS_KEY_INST) || "0", 10);
+  if (dismissed && Date.now() - dismissed < 7 * 24 * 3600 * 1000) return false;
+  return true;
+}
+
+function showInstallFab() {
+  if (!shouldShowInstall()) return;
+  const fab = document.getElementById("installFab");
+  if (fab) fab.style.display = "inline-flex";
+}
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallFab();
+});
+
+window.addEventListener("appinstalled", () => {
+  const fab = document.getElementById("installFab");
+  if (fab) fab.style.display = "none";
+  deferredInstallPrompt = null;
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const fab     = document.getElementById("installFab");
+  const dismiss = document.getElementById("installDismiss");
+  const modal   = document.getElementById("iosInstallModal");
+  const closeM  = document.getElementById("iosModalClose");
+
+  // iOS: show FAB right away (no beforeinstallprompt event on iOS)
+  if (isIOS && !isStandalone) showInstallFab();
+
+  if (fab) fab.addEventListener("click", async e => {
+    if (e.target === dismiss) return;  // dismiss handles itself
+    if (isIOS) {
+      modal.classList.add("show");
+      return;
+    }
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      if (choice.outcome === "accepted") fab.style.display = "none";
+    }
+  });
+
+  if (dismiss) dismiss.addEventListener("click", e => {
+    e.stopPropagation();
+    fab.style.display = "none";
+    localStorage.setItem(LS_KEY_INST, String(Date.now()));
+  });
+
+  if (closeM) closeM.addEventListener("click", () => modal.classList.remove("show"));
+  if (modal) modal.addEventListener("click", e => {
+    if (e.target === modal) modal.classList.remove("show");
+  });
+});
 
 let activeAccount = localStorage.getItem(LS_KEY_ACCT) || null;
 let allAccounts   = [];
