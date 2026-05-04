@@ -300,6 +300,34 @@ header::after {
 }
 .tab-badge.live { background:rgba(0,230,118,.12); color:var(--green); }
 .tab-badge.demo { background:rgba(0,212,255,.12);  color:var(--cyan); }
+.tab-badge.group {
+  background:rgba(255,180,0,.12); color:#ffb400;
+  margin-left: 4px;
+}
+
+/* Group filter pills */
+.group-filter {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 10px; align-items: center;
+}
+.group-pill {
+  font-size: 11px; font-weight: 600;
+  padding: 5px 12px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer;
+  transition: all .15s; font-family: inherit;
+  letter-spacing: .3px;
+}
+.group-pill:hover { border-color: rgba(0,212,255,0.3); color: var(--text); }
+.group-pill.active {
+  background: rgba(0,212,255,0.12);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.group-pill .count {
+  display: inline-block; margin-left: 5px; opacity: .65;
+  font-size: 10px;
+}
 .tab-seen { font-size:9px; color:var(--muted); margin-top:2px; font-family:'JetBrains Mono',monospace; }
 .tab-seen.live  { color:var(--green); }
 .tab-seen.warn  { color:var(--orange); }
@@ -729,13 +757,16 @@ body::before {
 <div class="err-banner" id="errBanner">⚠ &nbsp;<span id="errMsg"></span></div>
 
 <!-- ── ACCOUNT SWITCHER ── -->
-<div class="acct-switcher" id="acctSwitcher" style="display:none">
-  <span class="acct-switcher-label">Accounts <span id="acctCount" style="color:var(--cyan);font-weight:700"></span></span>
-  <input type="text" id="acctSearch" placeholder="Search account #, name, or server…"
-         style="display:none;background:var(--surface);border:1px solid var(--border);
-         color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;
-         min-width:240px;outline:none;transition:border-color .15s">
-  <div class="acct-tabs" id="acctTabs" style="max-height:280px;overflow-y:auto"></div>
+<div class="acct-switcher" id="acctSwitcher" style="display:none;flex-direction:column;align-items:flex-start;gap:8px">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%">
+    <span class="acct-switcher-label">Accounts <span id="acctCount" style="color:var(--cyan);font-weight:700"></span></span>
+    <input type="text" id="acctSearch" placeholder="Search account #, name, or server…"
+           style="display:none;background:var(--surface);border:1px solid var(--border);
+           color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;
+           min-width:240px;outline:none;transition:border-color .15s">
+  </div>
+  <div class="group-filter" id="groupFilter" style="display:none"></div>
+  <div class="acct-tabs" id="acctTabs" style="max-height:280px;overflow-y:auto;width:100%"></div>
 </div>
 
 <!-- ── ACCOUNT STRIP ── -->
@@ -1069,9 +1100,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+const LS_KEY_GROUP = "tc_active_group";
+
 let activeAccount = localStorage.getItem(LS_KEY_ACCT) || null;
+let activeGroup   = localStorage.getItem(LS_KEY_GROUP) || "All";
 let allAccounts   = [];
 let acctFilter    = "";
+
+function effectiveGroup(a) {
+  // If user set a custom group on the EA, use it; otherwise fall back to account_type
+  return (a.group && a.group.trim()) || a.account_type || "—";
+}
 
 /* ══════════════════════════════════════════════════════
    FORMATTING
@@ -1301,14 +1340,62 @@ function fmtSeenAge(sec) {
   return { txt: Math.round(sec/3600) + "h ago", cls: "stale" };
 }
 
+function renderGroupFilter() {
+  const filter = document.getElementById("groupFilter");
+  // Count by group, including a synthetic "All"
+  const counts = { All: allAccounts.length };
+  allAccounts.forEach(a => {
+    const g = effectiveGroup(a);
+    counts[g] = (counts[g] || 0) + 1;
+  });
+  const groups = ["All", ...Object.keys(counts).filter(g => g !== "All").sort()];
+
+  // Hide group filter if everything ends up in one bucket
+  if (groups.length <= 2 && allAccounts.length > 0) {
+    filter.style.display = "none";
+    activeGroup = "All";
+    return;
+  }
+  filter.style.display = "flex";
+
+  // Validate stored active group still has accounts
+  if (activeGroup !== "All" && !counts[activeGroup]) {
+    activeGroup = "All";
+    localStorage.setItem(LS_KEY_GROUP, activeGroup);
+  }
+
+  filter.innerHTML = "";
+  groups.forEach(g => {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "group-pill" + (g === activeGroup ? " active" : "");
+    pill.innerHTML = `${g}<span class="count">${counts[g]}</span>`;
+    pill.onclick = () => {
+      activeGroup = g;
+      localStorage.setItem(LS_KEY_GROUP, g);
+      renderGroupFilter();
+      renderAccountTabs();
+    };
+    filter.appendChild(pill);
+  });
+}
+
 function renderAccountTabs() {
   const tabs = document.getElementById("acctTabs");
   const f = acctFilter.toLowerCase().trim();
-  const list = !f ? allAccounts : allAccounts.filter(a =>
-    String(a.account_number).toLowerCase().includes(f) ||
-    (a.account_name||"").toLowerCase().includes(f) ||
-    (a.server||"").toLowerCase().includes(f)
-  );
+
+  let list = allAccounts;
+  if (activeGroup !== "All") {
+    list = list.filter(a => effectiveGroup(a) === activeGroup);
+  }
+  if (f) {
+    list = list.filter(a =>
+      String(a.account_number).toLowerCase().includes(f) ||
+      (a.account_name||"").toLowerCase().includes(f) ||
+      (a.server||"").toLowerCase().includes(f) ||
+      effectiveGroup(a).toLowerCase().includes(f)
+    );
+  }
 
   tabs.innerHTML = "";
   list.forEach(a => {
@@ -1316,13 +1403,18 @@ function renderAccountTabs() {
     const stale = a.stale ? " stale" : "";
     tab.className = "acct-tab" + (String(activeAccount) === String(a.account_number) ? " active" : "") + stale;
     tab.id = "tab-" + a.account_number;
-    const badge = a.account_type === "Live"
+    const typeBadge = a.account_type === "Live"
       ? `<span class="tab-badge live">LIVE</span>`
       : `<span class="tab-badge demo">DEMO</span>`;
+    // Custom group badge — only when EA-set group differs from account_type
+    const customGroup = (a.group||"").trim();
+    const groupBadge = (customGroup && customGroup !== a.account_type)
+      ? `<span class="tab-badge group">${customGroup}</span>` : "";
     const seen = fmtSeenAge(a.last_seen_sec);
     tab.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="tab-no">#${a.account_number}</span>${badge}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
+        <span class="tab-no">#${a.account_number}</span>
+        <span style="display:flex;gap:4px">${typeBadge}${groupBadge}</span>
       </div>
       <span class="tab-name">${a.account_name}</span>
       <span class="tab-srv">${a.server}</span>
@@ -1356,6 +1448,7 @@ async function refreshAccountTabs() {
       localStorage.removeItem(LS_KEY_ACCT);
     }
 
+    renderGroupFilter();
     renderAccountTabs();
 
     if(!activeAccount && allAccounts.length > 0) {

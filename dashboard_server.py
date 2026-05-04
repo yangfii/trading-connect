@@ -219,6 +219,7 @@ def api_accounts():
                 "currency":       meta.get("currency",     "USD"),
                 "leverage":       meta.get("leverage",     0),
                 "account_type":   meta.get("account_type", "—"),
+                "group":          (meta.get("group") or "").strip(),
                 "balance":        acct_data.get("balance", 0),
                 "equity":         acct_data.get("equity",  0),
                 "open_pnl":       acct_data.get("open_pnl",0),

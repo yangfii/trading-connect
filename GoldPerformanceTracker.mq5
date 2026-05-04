@@ -28,6 +28,7 @@
 input group "=== Server Connection ==="
 input string   InpServerURL    = "http://127.0.0.1:5000/api/push"; // Web Server URL
 input string   InpAuthToken    = "";            // Auth token (must match server AUTH_TOKEN)
+input string   InpAccountGroup = "";            // Group label: Prop / Personal / Demo / Live (optional)
 input int      InpTimeout      = 3000;          // HTTP timeout (ms)
 
 input group "=== Update Settings ==="
@@ -257,7 +258,8 @@ string BuildJSON(const SPerf &d) {
    j += "    \"server\": \""       + acctServer + "\",\n";
    j += "    \"currency\": \""     + acctCur    + "\",\n";
    j += "    \"leverage\": "       + IntegerToString(leverage) + ",\n";
-   j += "    \"account_type\": \"" + acctType   + "\"\n";
+   j += "    \"account_type\": \"" + acctType   + "\",\n";
+   j += "    \"group\": \""        + InpAccountGroup + "\"\n";
    j += "  },\n";
    j += "  \"account\": {\n";
    j += "    \"balance\": "  + DoubleToString(d.balance,         2) + ",\n";
