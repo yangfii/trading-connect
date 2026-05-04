@@ -104,6 +104,34 @@ def index():
     abort(404, "gold_dashboard.html not found")
 
 
+# ─── PWA assets ──────────────────────────────────────────────────────────────
+def _send_static(filename, mimetype):
+    p = Path(__file__).parent / filename
+    if not p.exists():
+        abort(404)
+    return send_file(p, mimetype=mimetype)
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    return _send_static("manifest.json", "application/manifest+json")
+
+@app.route("/icon-192.png")
+def pwa_icon_192():
+    return _send_static("icon-192.png", "image/png")
+
+@app.route("/icon-512.png")
+def pwa_icon_512():
+    return _send_static("icon-512.png", "image/png")
+
+@app.route("/icon-512-maskable.png")
+def pwa_icon_maskable():
+    return _send_static("icon-512-maskable.png", "image/png")
+
+@app.route("/apple-touch-icon.png")
+def pwa_apple_icon():
+    return _send_static("apple-touch-icon.png", "image/png")
+
+
 @app.route("/api/push", methods=["POST"])
 def api_push():
     """EA sends real MT5 data here every N seconds."""
