@@ -36,7 +36,7 @@ input bool     InpFileBackup   = true;          // Also write JSON file (backup)
 input string   InpJSONFile     = "gold_performance.json"; // Backup JSON filename
 
 input group "=== Trade Filter ==="
-input string   InpSymbol       = "XAUUSD";      // Symbol (empty = current chart)
+input string   InpSymbol       = "";            // Symbol (empty = auto-detect from chart)
 input long     InpMagic        = 0;             // Magic Number (0 = all)
 input datetime InpStartDate    = 0;             // History start (0 = all)
 
