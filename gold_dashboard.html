@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gold Tracker · Yang Fi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ══ DARK MODE (default) ══ */
+:root {
+  --bg:       #060912;
+  --bg2:      #0a0d1a;
+  --surface:  rgba(255,255,255,0.035);
+  --surface2: rgba(255,255,255,0.06);
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(0,212,255,0.3);
+  --cyan:     #00d4ff;
+  --cyan2:    #33e0ff;
+  --cyan3:    #80eeff;
+  --glow:     rgba(0,212,255,0.12);
+  --green:    #00e676;
+  --green2:   #00c853;
+  --red:      #ff3d5a;
+  --red2:     #c62828;
+  --orange:   #ff9100;
+  --text:     #dde6f0;
+  --text2:    #7b8fac;
+  --muted:    #3a4a62;
+  --r: 12px;
+  --shadow:   rgba(0,0,0,0.4);
+  --scheme: dark;
+}
+
+/* ══ LIGHT MODE (auto from device) ══ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:       #f0f4f8;
+    --bg2:      #e4eaf2;
+    --surface:  rgba(255,255,255,0.75);
+    --surface2: rgba(255,255,255,0.9);
+    --border:   rgba(0,50,120,0.1);
+    --border2:  rgba(0,140,200,0.35);
+    --cyan:     #0099cc;
+    --cyan2:    #007ab5;
+    --cyan3:    #005f8a;
+    --glow:     rgba(0,150,200,0.1);
+    --green:    #00a854;
+    --green2:   #007a3d;
+    --red:      #e02040;
+    --red2:     #a8001a;
+    --orange:   #d4700a;
+    --text:     #0d1826;
+    --text2:    #4a5f78;
+    --muted:    #8fa3bc;
+    --shadow:   rgba(0,50,100,0.12);
+    --scheme: light;
+  }
+}
+
+/* ══ FORCE DARK (manual override) ══ */
+:root[data-theme="dark"] {
+  --bg:       #060912;
+  --bg2:      #0a0d1a;
+  --surface:  rgba(255,255,255,0.035);
+  --surface2: rgba(255,255,255,0.06);
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(0,212,255,0.3);
+  --cyan:     #00d4ff;
+  --cyan2:    #33e0ff;
+  --cyan3:    #80eeff;
+  --glow:     rgba(0,212,255,0.12);
+  --green:    #00e676;
+  --green2:   #00c853;
+  --red:      #ff3d5a;
+  --red2:     #c62828;
+  --orange:   #ff9100;
+  --text:     #dde6f0;
+  --text2:    #7b8fac;
+  --muted:    #3a4a62;
+  --shadow:   rgba(0,0,0,0.4);
+  --scheme: dark;
+}
+
+/* ══ FORCE LIGHT (manual override) ══ */
+:root[data-theme="light"] {
+  --bg:       #f0f4f8;
+  --bg2:      #e4eaf2;
+  --surface:  rgba(255,255,255,0.75);
+  --surface2: rgba(255,255,255,0.9);
+  --border:   rgba(0,50,120,0.1);
+  --border2:  rgba(0,140,200,0.35);
+  --cyan:     #0099cc;
+  --cyan2:    #007ab5;
+  --cyan3:    #005f8a;
+  --glow:     rgba(0,150,200,0.1);
+  --green:    #00a854;
+  --green2:   #007a3d;
+  --red:      #e02040;
+  --red2:     #a8001a;
+  --orange:   #d4700a;
+  --text:     #0d1826;
+  --text2:    #4a5f78;
+  --muted:    #8fa3bc;
+  --shadow:   rgba(0,50,100,0.12);
+  --scheme: light;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  transition: background .35s, color .35s;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% -10%, rgba(0,212,255,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 35% at 92% 8%,  rgba(0,230,118,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 30% 30% at 5% 95%,  rgba(0,150,255,0.04) 0%, transparent 50%);
+}
+
+/* Light mode body gradient override */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) body,
+  :root[data-theme="light"] body {
+    background-image:
+      radial-gradient(ellipse 70% 45% at 50% -10%, rgba(0,150,200,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 35% 35% at 92% 8%,  rgba(0,160,80,0.04)  0%, transparent 50%),
+      radial-gradient(ellipse 30% 30% at 5% 95%,  rgba(0,100,200,0.04) 0%, transparent 50%);
+  }
+}
+:root[data-theme="light"] body {
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% -10%, rgba(0,150,200,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 35% at 92% 8%,  rgba(0,160,80,0.04)  0%, transparent 50%),
+    radial-gradient(ellipse 30% 30% at 5% 95%,  rgba(0,100,200,0.04) 0%, transparent 50%);
+}
+
+/* ─── SMOOTH TRANSITIONS ─── */
+header, .acct-card, .kpi, .chart-card, .stat-card, .acct-tab, .pill, .time-chip, .open-row {
+  transition: background .3s, border-color .3s, box-shadow .3s, color .3s;
+}
+
+/* ─── LIGHT MODE: card elevations ─── */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .acct-card,
+  :root:not([data-theme="dark"]) .kpi,
+  :root:not([data-theme="dark"]) .chart-card,
+  :root:not([data-theme="dark"]) .stat-card {
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+}
+:root[data-theme="light"] .acct-card,
+:root[data-theme="light"] .kpi,
+:root[data-theme="light"] .chart-card,
+:root[data-theme="light"] .stat-card {
+  box-shadow: 0 2px 12px var(--shadow);
+}
+
+/* ─── THEME TOGGLE BUTTON ─── */
+.theme-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 40px; padding: 6px 12px;
+  cursor: pointer; font-size: 12px; color: var(--text2);
+  transition: all .2s; user-select: none;
+  white-space: nowrap;
+}
+.theme-toggle:hover { border-color: var(--cyan); color: var(--cyan); }
+.theme-toggle .tog-icon { font-size: 14px; line-height: 1; }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--muted);border-radius:3px}
+
+/* ─── LAYOUT ─── */
+.page { max-width: 1400px; margin: 0 auto; padding: 20px 24px 48px; }
+
+/* ─── HEADER ─── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 14px;
+  padding: 18px 26px;
+  background: linear-gradient(135deg, rgba(0,212,255,0.05) 0%, rgba(255,255,255,0.025) 100%);
+  border: 1px solid rgba(0,212,255,0.15);
+  border-radius: 16px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(20px);
+  position: relative; overflow: hidden;
+}
+header::before {
+  content:'';
+  position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: linear-gradient(180deg, var(--cyan), rgba(0,212,255,0.2));
+}
+header::after {
+  content:'';
+  position:absolute; inset:0;
+  background: radial-gradient(ellipse 60% 100% at 0% 50%, rgba(0,212,255,0.04) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+.hd-left { display:flex; align-items:center; gap:16px; }
+.hd-icon {
+  width: 48px; height: 48px;
+  background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,150,255,0.15));
+  border: 1px solid rgba(0,212,255,0.3);
+  border-radius: 13px;
+  display: flex; align-items:center; justify-content:center;
+  font-size: 22px;
+  box-shadow: 0 0 24px rgba(0,212,255,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.hd-title {
+  font-size: 18px; font-weight: 800;
+  color: var(--cyan);
+  letter-spacing: .8px;
+  text-shadow: 0 0 20px rgba(0,212,255,0.4);
+}
+.hd-sub { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+.hd-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pill {
+  display:flex; align-items:center; gap:8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 40px; padding: 7px 14px; font-size: 12px;
+}
+.dot {
+  width:8px; height:8px; border-radius:50%;
+  background: var(--muted);
+}
+.dot.live  { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 2s infinite; }
+.dot.error { background: var(--red); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+.time-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text2);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px;
+  letter-spacing: .5px;
+}
+
+/* ─── ERROR BANNER ─── */
+.err-banner {
+  display:none;
+  background: rgba(255,61,90,0.07); border: 1px solid rgba(255,61,90,0.25);
+  color: #ff7b8a; border-radius: var(--r); padding: 13px 18px;
+  margin-bottom: 16px; font-size: 13px;
+}
+
+/* ─── ACCOUNT SWITCHER ─── */
+.acct-switcher {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 16px;
+}
+.acct-switcher-label {
+  font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+.acct-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.acct-tab {
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px;
+  cursor: pointer; transition: all .15s;
+  min-width: 165px;
+}
+.acct-tab:hover  { border-color: rgba(0,212,255,0.3); transform: translateY(-1px); }
+.acct-tab.active {
+  border-color: var(--cyan);
+  background: rgba(0,212,255,0.06);
+  box-shadow: 0 0 20px rgba(0,212,255,0.1);
+}
+.tab-no   { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:var(--cyan2); }
+.tab-name { font-size:10px; color:var(--text2); }
+.tab-srv  { font-size:9px;  color:var(--muted); }
+.tab-bal  { font-size:11px; font-weight:600; margin-top:3px; }
+.tab-badge {
+  display:inline-block;
+  font-size:9px; padding:2px 7px; border-radius:20px; font-weight:700;
+  letter-spacing:.5px;
+}
+.tab-badge.live { background:rgba(0,230,118,.12); color:var(--green); }
+.tab-badge.demo { background:rgba(0,212,255,.12);  color:var(--cyan); }
+
+/* ─── ACCOUNT STRIP ─── */
+.acct-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+@media(max-width:700px){.acct-strip{grid-template-columns:1fr 1fr}}
+
+.acct-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  position: relative; overflow: hidden;
+  transition: border-color .2s, transform .2s;
+}
+.acct-card:hover { transform:translateY(-2px); }
+.acct-card::after {
+  content:'';
+  position:absolute; bottom:0; left:0; right:0;
+  height:2px;
+  background: linear-gradient(90deg, var(--cyan), transparent);
+  opacity: .4;
+}
+.acct-card.green-accent::after { background: linear-gradient(90deg, var(--green), transparent); opacity:.5; }
+.acct-card.red-accent::after   { background: linear-gradient(90deg, var(--red),   transparent); opacity:.5; }
+.acct-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 7px; }
+.acct-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 21px; font-weight: 700; color: var(--cyan3);
+  line-height:1;
+}
+.acct-val.g { color: var(--green); }
+.acct-val.r { color: var(--red); }
+.acct-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* ─── KPI ROW ─── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+@media(max-width:1000px){.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px) {.kpi-row{grid-template-columns:1fr 1fr}}
+
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px 16px;
+  text-align: center;
+  position: relative; overflow: hidden;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+  cursor: default;
+}
+.kpi:hover {
+  transform: translateY(-3px);
+  border-color: rgba(0,212,255,0.2);
+  box-shadow: 0 8px 28px rgba(0,212,255,0.07);
+}
+.kpi::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent);
+}
+.kpi-icon { font-size: 22px; margin-bottom: 10px; }
+.kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; }
+.kpi-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 23px; font-weight: 700;
+  color: var(--cyan3); line-height: 1;
+  transition: color .3s;
+}
+.kpi-val.g { color: var(--green); }
+.kpi-val.r { color: var(--red); }
+.kpi-val.o { color: var(--orange); }
+.kpi-sub { font-size: 10px; color: var(--muted); margin-top: 7px; }
+
+/* Win Rate ring */
+.wr-ring-wrap { position:relative; width:72px; height:72px; margin:0 auto 8px; }
+.wr-ring-wrap canvas { position:absolute;inset:0; }
+.wr-ring-center {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700;
+  color: var(--cyan3);
+}
+
+/* ─── CHARTS ROW ─── */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 14px; margin-bottom: 16px;
+}
+@media(max-width:800px){.charts-row{grid-template-columns:1fr}}
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 22px;
+  position: relative; overflow: hidden;
+}
+.chart-card::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.25), transparent);
+}
+.chart-card h3 {
+  font-size: 11px; color: var(--cyan);
+  text-transform: uppercase; letter-spacing: 1.5px;
+  margin-bottom: 18px;
+  display:flex; align-items:center; gap:10px;
+  font-weight: 600;
+}
+.chart-card h3::before {
+  content:'';
+  width:3px; height:13px;
+  background: linear-gradient(180deg, var(--cyan), rgba(0,212,255,0.3));
+  border-radius: 2px;
+}
+.chart-wrap { position:relative; }
+
+/* Donut legend */
+.donut-legend {
+  display:flex; flex-direction:column; gap:9px; margin-top:18px;
+}
+.donut-leg-item {
+  display:flex; align-items:center; justify-content:space-between;
+  font-size:12px;
+}
+.donut-leg-left { display:flex;align-items:center;gap:8px;color:var(--text2); }
+.donut-leg-dot  { width:10px;height:10px;border-radius:3px; }
+
+/* ─── BOTTOM STATS ROW ─── */
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media(max-width:800px){.bottom-row{grid-template-columns:1fr}}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 22px;
+  position: relative; overflow: hidden;
+}
+.stat-card::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.2), transparent);
+}
+.stat-card h3 {
+  font-size: 11px; color: var(--cyan);
+  text-transform: uppercase; letter-spacing: 1.5px;
+  margin-bottom: 16px;
+  display:flex; align-items:center; gap:10px;
+  font-weight: 600;
+}
+.stat-card h3::before {
+  content:'';
+  width:3px; height:13px;
+  background: linear-gradient(180deg, var(--cyan), rgba(0,212,255,0.3));
+  border-radius: 2px;
+}
+
+.stat-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+.stat-row:last-child { border-bottom:none; }
+.stat-k { color: var(--text2); }
+.stat-v { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; }
+.stat-v.g { color: var(--green); }
+.stat-v.r { color: var(--red); }
+.stat-v.o { color: var(--orange); }
+.stat-v.w { color: var(--text); }
+.stat-v.c { color: var(--cyan2); }
+
+/* Progress bars */
+.pbar-wrap { display:flex;align-items:center;gap:10px; }
+.pbar-bg {
+  flex:1; height:3px; background:rgba(255,255,255,0.05);
+  border-radius:4px; overflow:hidden; min-width:80px;
+}
+.pbar-fill { height:100%;border-radius:4px;transition:width .6s ease; }
+.pbar-fill.g    { background: linear-gradient(90deg,var(--green2),var(--green)); }
+.pbar-fill.r    { background: linear-gradient(90deg,var(--red2),var(--red)); }
+.pbar-fill.cyan { background: linear-gradient(90deg,#0080c0,var(--cyan)); }
+
+/* Open positions */
+.open-section {
+  margin-top: 16px; padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.open-label { font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px; }
+.open-row {
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--surface2);
+  border:1px solid rgba(0,212,255,0.1);
+  border-radius:10px; padding:12px 16px;
+}
+.open-count { font-size:24px;font-weight:800;color:var(--cyan3);font-family:'JetBrains Mono',monospace; }
+.open-pnl   { font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700; }
+
+/* ─── FOOTER ─── */
+footer {
+  text-align:center; color:var(--muted);
+  font-size:11px; margin-top:28px;
+  display:flex; align-items:center; justify-content:center; gap:16px;
+  flex-wrap:wrap;
+}
+footer a { color:var(--cyan);text-decoration:none; opacity:.7; transition:opacity .2s; }
+footer a:hover { opacity:1; }
+.footer-sep { color:var(--muted);opacity:.3; }
+
+/* ─── NUMBER ANIMATION ─── */
+.num-flash { animation: flash .35s ease; }
+@keyframes flash { 0%{opacity:.3} 100%{opacity:1} }
+
+/* ─── DIVIDER SECTION LABELS ─── */
+.section-label {
+  font-size: 9px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 2px;
+  margin-bottom: 10px; padding-left: 2px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="hd-left">
+    <div class="hd-icon">📊</div>
+    <div>
+      <div class="hd-title">GOLD PERFORMANCE TRACKER</div>
+      <div class="hd-sub" id="hd-sub-text">Yang Fi &nbsp;·&nbsp; MT5 Live Monitor &nbsp;·&nbsp; XAUUSD</div>
+    </div>
+  </div>
+  <div class="hd-right">
+    <div class="pill">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText" style="color:var(--text2);font-size:12px">Connecting…</span>
+    </div>
+    <div class="time-chip" id="lastUpdate">--:--:--</div>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark mode">
+      <span class="tog-icon" id="togIcon">🌙</span>
+      <span id="togLabel">Dark</span>
+    </button>
+  </div>
+</header>
+
+<!-- ── ERROR ── -->
+<div class="err-banner" id="errBanner">⚠ &nbsp;<span id="errMsg"></span></div>
+
+<!-- ── ACCOUNT SWITCHER (shown when >1 account) ── -->
+<div class="acct-switcher" id="acctSwitcher" style="display:none">
+  <span class="acct-switcher-label">Accounts</span>
+  <div class="acct-tabs" id="acctTabs"></div>
+</div>
+
+<!-- ── ACCOUNT STRIP ── -->
+<div class="section-label">Account Overview</div>
+<div class="acct-strip">
+  <div class="acct-card" id="ac-bal">
+    <div class="acct-label">Balance</div>
+    <div class="acct-val" id="ac-val-bal">--</div>
+    <div class="acct-sub">Account funds</div>
+  </div>
+  <div class="acct-card" id="ac-eq">
+    <div class="acct-label">Equity</div>
+    <div class="acct-val" id="ac-val-eq">--</div>
+    <div class="acct-sub" id="ac-eq-diff">--</div>
+  </div>
+  <div class="acct-card" id="ac-opnl">
+    <div class="acct-label">Open PnL</div>
+    <div class="acct-val" id="ac-val-opnl">--</div>
+    <div class="acct-sub" id="ac-opnl-sub">floating</div>
+  </div>
+  <div class="acct-card" id="ac-opos">
+    <div class="acct-label">Open Positions</div>
+    <div class="acct-val" id="ac-val-opos">--</div>
+    <div class="acct-sub">active trades</div>
+  </div>
+</div>
+
+<!-- ── KPI ROW ── -->
+<div class="section-label">Key Performance Indicators</div>
+<div class="kpi-row">
+
+  <!-- Win Rate ring -->
+  <div class="kpi" id="kpi-wr">
+    <div class="kpi-icon">🎯</div>
+    <div class="kpi-label">Win Rate</div>
+    <div class="wr-ring-wrap">
+      <canvas id="wrRing" width="72" height="72"></canvas>
+      <div class="wr-ring-center" id="wr-center">--%</div>
+    </div>
+    <div class="kpi-sub" id="wr-sub">-- W / -- L</div>
+  </div>
+
+  <!-- Total PnL -->
+  <div class="kpi" id="kpi-pnl">
+    <div class="kpi-icon">💵</div>
+    <div class="kpi-label">Total PnL</div>
+    <div class="kpi-val" id="kv-pnl">--</div>
+    <div class="kpi-sub" id="kv-pnl-sub">-- trades closed</div>
+  </div>
+
+  <!-- Profit Factor -->
+  <div class="kpi" id="kpi-pf">
+    <div class="kpi-icon">⚖️</div>
+    <div class="kpi-label">Profit Factor</div>
+    <div class="kpi-val" id="kv-pf">--</div>
+    <div class="kpi-sub">Win $ ÷ Loss $</div>
+  </div>
+
+  <!-- Max Drawdown -->
+  <div class="kpi">
+    <div class="kpi-icon">📉</div>
+    <div class="kpi-label">Max Drawdown</div>
+    <div class="kpi-val r" id="kv-dd">--</div>
+    <div class="kpi-sub" id="kv-dd-pct">--%</div>
+  </div>
+
+  <!-- Avg R:R -->
+  <div class="kpi" id="kpi-rr">
+    <div class="kpi-icon">🏹</div>
+    <div class="kpi-label">Avg R : R</div>
+    <div class="kpi-val" id="kv-rr">--</div>
+    <div class="kpi-sub">Risk / Reward</div>
+  </div>
+</div>
+
+<!-- ── CHARTS ROW ── -->
+<div class="section-label">Analytics</div>
+<div class="charts-row">
+
+  <!-- Donut: Win vs Loss -->
+  <div class="chart-card">
+    <h3>Win / Loss Split</h3>
+    <div class="chart-wrap" style="max-width:180px;margin:0 auto">
+      <canvas id="donutChart" height="180"></canvas>
+    </div>
+    <div class="donut-legend">
+      <div class="donut-leg-item">
+        <div class="donut-leg-left">
+          <div class="donut-leg-dot" style="background:var(--green)"></div>
+          <span>Win trades</span>
+        </div>
+        <span class="stat-v g" id="leg-wins">--</span>
+      </div>
+      <div class="donut-leg-item">
+        <div class="donut-leg-left">
+          <div class="donut-leg-dot" style="background:var(--red)"></div>
+          <span>Loss trades</span>
+        </div>
+        <span class="stat-v r" id="leg-losses">--</span>
+      </div>
+      <div class="donut-leg-item">
+        <div class="donut-leg-left">
+          <div class="donut-leg-dot" style="background:var(--cyan)"></div>
+          <span>Total</span>
+        </div>
+        <span class="stat-v c" id="leg-total">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bar: PnL Breakdown -->
+  <div class="chart-card">
+    <h3>PnL Breakdown</h3>
+    <div class="chart-wrap">
+      <canvas id="barChart" height="200"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── BOTTOM STATS ── -->
+<div class="section-label">Detailed Statistics</div>
+<div class="bottom-row">
+
+  <!-- Trade Stats -->
+  <div class="stat-card">
+    <h3>Trade Statistics</h3>
+    <div class="stat-row">
+      <span class="stat-k">Total Trades</span>
+      <span class="stat-v c" id="s-total">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Win Rate</span>
+      <div class="pbar-wrap">
+        <div class="pbar-bg"><div class="pbar-fill g" id="pb-wr" style="width:0%"></div></div>
+        <span class="stat-v g" id="s-wr">--%</span>
+      </div>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Best Trade</span>
+      <span class="stat-v g" id="s-best">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Worst Trade</span>
+      <span class="stat-v r" id="s-worst">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Avg Win</span>
+      <span class="stat-v g" id="s-avgw">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Avg Loss</span>
+      <span class="stat-v r" id="s-avgl">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Total Gross Win</span>
+      <span class="stat-v g" id="s-tw">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Total Gross Loss</span>
+      <span class="stat-v r" id="s-tl">--</span>
+    </div>
+  </div>
+
+  <!-- Risk Metrics -->
+  <div class="stat-card">
+    <h3>Risk Metrics</h3>
+    <div class="stat-row">
+      <span class="stat-k">Max Drawdown $</span>
+      <span class="stat-v r" id="r-dd">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Max Drawdown %</span>
+      <div class="pbar-wrap">
+        <div class="pbar-bg"><div class="pbar-fill r" id="pb-dd" style="width:0%"></div></div>
+        <span class="stat-v r" id="r-ddp">--%</span>
+      </div>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Daily Drawdown</span>
+      <span class="stat-v" id="r-ddd">--%</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Avg Risk : Reward</span>
+      <span class="stat-v" id="r-rr">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Profit Factor</span>
+      <div class="pbar-wrap">
+        <div class="pbar-bg"><div class="pbar-fill cyan" id="pb-pf" style="width:0%"></div></div>
+        <span class="stat-v" id="r-pf">--</span>
+      </div>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Balance</span>
+      <span class="stat-v w" id="r-bal">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-k">Equity</span>
+      <span class="stat-v" id="r-eq">--</span>
+    </div>
+
+    <!-- Open Positions -->
+    <div class="open-section">
+      <div class="open-label">Open Positions</div>
+      <div class="open-row">
+        <div>
+          <div class="open-count" id="op-count">0</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">positions</div>
+        </div>
+        <div style="text-align:right">
+          <div class="open-pnl" id="op-pnl">--</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">floating PnL</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <span>Gold Performance Tracker</span>
+  <span class="footer-sep">|</span>
+  <span>Yang Fi &nbsp;·&nbsp; MT5</span>
+  <span class="footer-sep">|</span>
+  <span>Auto-refresh every 5s</span>
+  <span class="footer-sep">|</span>
+  <a href="/api/performance" target="_blank">Raw JSON ↗</a>
+</footer>
+
+</div><!-- .page -->
+
+<script>
+/* ══════════════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════════════ */
+const SSE_URL      = "/api/stream";
+const API_URL      = "/api/performance";
+const ACCOUNTS_URL = "/api/accounts";
+const POLL_MS      = 8000;
+
+let activeAccount = null;
+
+/* ══════════════════════════════════════════════════════
+   FORMATTING
+══════════════════════════════════════════════════════ */
+const fmt$ = v => {
+  const n = Number(v)||0;
+  const s = Math.abs(n).toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (n < 0 ? "−$" : "$") + s;
+};
+const fmtPct = v => (Number(v)||0).toFixed(2) + "%";
+const fmtRR  = v => "1 : " + (Number(v)||0).toFixed(2);
+
+/* ══════════════════════════════════════════════════════
+   CHART: Win/Loss Donut
+══════════════════════════════════════════════════════ */
+const donutCtx = document.getElementById("donutChart").getContext("2d");
+const donutChart = new Chart(donutCtx, {
+  type: "doughnut",
+  data: {
+    labels: ["Wins","Losses"],
+    datasets:[{
+      data:[1,1],
+      backgroundColor:["rgba(0,230,118,0.85)","rgba(255,61,90,0.85)"],
+      borderColor:["rgba(0,230,118,0.15)","rgba(255,61,90,0.15)"],
+      borderWidth:1,
+      hoverOffset:6,
+    }]
+  },
+  options:{
+    cutout:"72%",
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.raw}` } } },
+    animation:{ animateRotate:true, duration:700 },
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+   CHART: PnL Bar
+══════════════════════════════════════════════════════ */
+const barCtx = document.getElementById("barChart").getContext("2d");
+const barChart = new Chart(barCtx, {
+  type: "bar",
+  data: {
+    labels:["Total PnL","Gross Win","Gross Loss","Avg Win","Avg Loss","Best","Worst"],
+    datasets:[{
+      label:"$",
+      data:[0,0,0,0,0,0,0],
+      backgroundColor:[
+        "rgba(0,212,255,0.75)",
+        "rgba(0,230,118,0.75)",
+        "rgba(255,61,90,0.75)",
+        "rgba(0,200,83,0.75)",
+        "rgba(198,40,40,0.75)",
+        "rgba(0,230,118,0.95)",
+        "rgba(255,61,90,0.95)",
+      ],
+      borderRadius: 5,
+      borderSkipped: false,
+    }]
+  },
+  options:{
+    responsive:true,
+    plugins:{
+      legend:{display:false},
+      tooltip:{ callbacks:{ label: ctx => ` $${Number(ctx.raw).toFixed(2)}` } }
+    },
+    scales:{
+      x:{
+        ticks:{ color:"#3a4a62", font:{size:10} },
+        grid:{ color:"rgba(255,255,255,0.03)" }
+      },
+      y:{
+        ticks:{ color:"#3a4a62", font:{size:10},
+          callback: v => "$"+Number(v).toFixed(0)
+        },
+        grid:{ color:"rgba(255,255,255,0.05)" }
+      }
+    },
+    animation:{ duration:600 }
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+   CHART: Win Rate Ring
+══════════════════════════════════════════════════════ */
+const wrCtx = document.getElementById("wrRing").getContext("2d");
+const wrRing = new Chart(wrCtx, {
+  type:"doughnut",
+  data:{
+    datasets:[{
+      data:[0,100],
+      backgroundColor:["rgba(0,230,118,0.85)","rgba(255,255,255,0.05)"],
+      borderWidth:0,
+    }]
+  },
+  options:{
+    cutout:"78%",
+    plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+    animation:{ duration:700 }
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════ */
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if(el){ el.textContent = text; el.classList.remove("num-flash"); void el.offsetWidth; el.classList.add("num-flash"); }
+}
+function setPbar(id, pct) {
+  const el = document.getElementById(id);
+  if(el) el.style.width = Math.min(Math.max(pct,0),100) + "%";
+}
+
+let sseConnected = false;
+let pollTimer    = null;
+let acctPollTimer= null;
+
+/* ══════════════════════════════════════════════════════
+   SSE
+══════════════════════════════════════════════════════ */
+function connectSSE() {
+  const es = new EventSource(SSE_URL);
+  es.onopen = () => {
+    sseConnected = true;
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  };
+  es.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      const pushNo = String(d.account_number || d.meta?.account_number || "");
+      if(!activeAccount || activeAccount === pushNo) render(d);
+      refreshAccountTabs();
+    } catch(_){}
+  };
+  es.onerror = () => {
+    sseConnected = false;
+    es.close();
+    if(!pollTimer) pollTimer = setInterval(pollFallback, POLL_MS);
+    setTimeout(connectSSE, 5000);
+  };
+}
+
+async function pollFallback() {
+  if(sseConnected) return;
+  try {
+    const url = API_URL + "?_=" + Date.now() +
+                (activeAccount ? "&account=" + activeAccount : "");
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(res.status);
+    render(await res.json());
+  } catch(e) {
+    showError("Cannot reach server. Run start_dashboard.bat and make sure EA is active.");
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   ACCOUNT SWITCHER
+══════════════════════════════════════════════════════ */
+async function refreshAccountTabs() {
+  try {
+    const res  = await fetch(ACCOUNTS_URL + "?_=" + Date.now());
+    const data = await res.json();
+    const list = data.accounts || [];
+
+    const switcher = document.getElementById("acctSwitcher");
+    const tabs     = document.getElementById("acctTabs");
+
+    if(list.length <= 1){ switcher.style.display = "none"; return; }
+    switcher.style.display = "flex";
+
+    const ids = list.map(a => a.account_number).join(",");
+    if(tabs.dataset.ids === ids) {
+      list.forEach(a => {
+        const balEl = document.getElementById("tab-bal-" + a.account_number);
+        if(balEl) balEl.textContent = fmt$(a.balance);
+      });
+      return;
+    }
+    tabs.dataset.ids = ids;
+    tabs.innerHTML = "";
+
+    list.forEach(a => {
+      const tab = document.createElement("div");
+      tab.className = "acct-tab" + (activeAccount === a.account_number ? " active" : "");
+      tab.id = "tab-" + a.account_number;
+      const badge = a.account_type === "Live"
+        ? `<span class="tab-badge live">LIVE</span>`
+        : `<span class="tab-badge demo">DEMO</span>`;
+      tab.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="tab-no">#${a.account_number}</span>${badge}
+        </div>
+        <span class="tab-name">${a.account_name}</span>
+        <span class="tab-srv">${a.server}</span>
+        <span class="tab-bal ${a.equity >= a.balance ? 'g':'r'}" id="tab-bal-${a.account_number}">${fmt$(a.balance)}</span>
+      `;
+      tab.onclick = () => switchAccount(a.account_number);
+      tabs.appendChild(tab);
+    });
+
+    if(!activeAccount) switchAccount(list[0].account_number);
+
+  } catch(_) {}
+}
+
+async function switchAccount(no) {
+  activeAccount = String(no);
+  document.querySelectorAll(".acct-tab").forEach(t => t.classList.remove("active"));
+  const sel = document.getElementById("tab-" + no);
+  if(sel) sel.classList.add("active");
+  try {
+    const res = await fetch(API_URL + "?account=" + no + "&_=" + Date.now());
+    render(await res.json());
+  } catch(_) {}
+}
+
+/* ══════════════════════════════════════════════════════
+   RENDER
+══════════════════════════════════════════════════════ */
+function render(d) {
+  const dot  = document.getElementById("statusDot");
+  const stxt = document.getElementById("statusText");
+  const err  = document.getElementById("errBanner");
+
+  if(d.error) { showError(d.error); return; }
+
+  err.style.display = "none";
+  dot.className     = "dot live";
+  const src = d._source === "mt5_push" ? "MT5 Live" : (d._source === "file" ? "File" : "Live");
+  stxt.textContent = src;
+  document.getElementById("lastUpdate").textContent = d.updated || "--";
+
+  // Header sub-line
+  const meta   = d.meta || {};
+  const acctNo = meta.account_number || d.account_number || "";
+  const hSub   = document.getElementById("hd-sub-text");
+  if(hSub && acctNo) {
+    const atype = meta.account_type === "Live"
+      ? `<span style="color:var(--green);font-weight:700">● LIVE</span>`
+      : `<span style="color:var(--cyan)">● DEMO</span>`;
+    hSub.innerHTML =
+      `Yang Fi &nbsp;·&nbsp; <b style="color:var(--cyan2)">#${acctNo}</b> &nbsp;·&nbsp; `
+      + `${meta.account_name || ""} &nbsp;·&nbsp; ${meta.server || "MT5"} &nbsp;·&nbsp; `
+      + `${d.symbol || "XAUUSD"} &nbsp;·&nbsp; ${atype}`;
+  }
+
+  const acc  = d.account     || {};
+  const perf = d.performance || {};
+  const risk = d.risk        || {};
+
+  const bal  = acc.balance   || 0;
+  const eq   = acc.equity    || 0;
+  const opnl = acc.open_pnl  || 0;
+  const opos = acc.open_pos  || 0;
+
+  const pnl  = perf.total_pnl     || 0;
+  const wr   = perf.win_rate      || 0;
+  const pf   = perf.profit_factor || 0;
+  const wins = perf.win_trades    || 0;
+  const loss = perf.loss_trades   || 0;
+  const tot  = perf.total_trades  || 0;
+  const aw   = perf.avg_win       || 0;
+  const al   = perf.avg_loss      || 0;
+  const bt   = perf.best_trade    || 0;
+  const wt   = perf.worst_trade   || 0;
+  const tw   = aw * wins;
+  const tl   = al * loss;
+
+  const dd   = risk.max_drawdown     || 0;
+  const ddp  = Math.abs(risk.max_drawdown_pct || 0);
+  const ddd  = risk.daily_dd_pct     || 0;
+  const rr   = risk.avg_rr           || 0;
+
+  /* Account Strip */
+  setText("ac-val-bal", fmt$(bal));
+  setText("ac-val-eq",  fmt$(eq));
+  document.getElementById("ac-val-eq").className = "acct-val " + (eq >= bal ? "g":"r");
+  document.getElementById("ac-eq").className     = "acct-card " + (eq >= bal ? "green-accent":"red-accent");
+  setText("ac-eq-diff", (eq >= bal ? "▲ " : "▼ ") + fmt$(Math.abs(eq-bal)) + " vs balance");
+
+  setText("ac-val-opnl", fmt$(opnl));
+  document.getElementById("ac-val-opnl").className = "acct-val " + (opnl >= 0 ? "g":"r");
+  document.getElementById("ac-opnl").className     = "acct-card " + (opnl >= 0 ? "green-accent":"red-accent");
+  setText("ac-val-opos", opos);
+
+  /* KPI Row */
+  wrRing.data.datasets[0].data = [wr, 100-wr];
+  wrRing.data.datasets[0].backgroundColor[0] = wr >= 50 ? "rgba(0,230,118,0.85)" : "rgba(255,61,90,0.85)";
+  wrRing.update();
+  setText("wr-center", fmtPct(wr));
+  document.getElementById("wr-center").style.color = wr >= 50 ? "var(--green)":"var(--red)";
+  setText("wr-sub", wins + " W  /  " + loss + " L");
+
+  setText("kv-pnl", fmt$(pnl));
+  document.getElementById("kv-pnl").className = "kpi-val " + (pnl >= 0 ? "g":"r");
+  document.getElementById("kpi-pnl").style.boxShadow = pnl >= 0
+    ? "0 0 20px rgba(0,230,118,0.07)" : "0 0 20px rgba(255,61,90,0.07)";
+  setText("kv-pnl-sub", tot + " trades closed");
+
+  setText("kv-pf", Number(pf).toFixed(2));
+  document.getElementById("kv-pf").className = "kpi-val " + (pf >= 1 ? "g":"r");
+
+  setText("kv-dd",    fmt$(dd));
+  setText("kv-dd-pct", fmtPct(-ddp));
+
+  setText("kv-rr", fmtRR(rr));
+  document.getElementById("kv-rr").className = "kpi-val " + (rr >= 1 ? "g":"o");
+
+  /* Donut */
+  donutChart.data.datasets[0].data = [wins||0, loss||1];
+  donutChart.update();
+  setText("leg-wins",   wins);
+  setText("leg-losses", loss);
+  setText("leg-total",  tot);
+
+  /* Bar */
+  barChart.data.datasets[0].data = [pnl, tw, -tl, aw, -al, bt, wt];
+  barChart.update();
+
+  /* Trade Stats */
+  setText("s-total", tot);
+  setText("s-wr",    fmtPct(wr));
+  document.getElementById("s-wr").className = "stat-v " + (wr >= 50 ? "g":"r");
+  setPbar("pb-wr", wr);
+  setText("s-best",  fmt$(bt));
+  setText("s-worst", fmt$(wt));
+  setText("s-avgw",  fmt$(aw));
+  setText("s-avgl",  fmt$(al));
+  setText("s-tw",    fmt$(tw));
+  setText("s-tl",    fmt$(tl));
+
+  /* Risk */
+  setText("r-dd",  fmt$(dd));
+  setText("r-ddp", fmtPct(-ddp));
+  setPbar("pb-dd", Math.min(ddp * 5, 100));
+
+  setText("r-ddd", fmtPct(ddd));
+  document.getElementById("r-ddd").className = "stat-v " + (ddd < -2 ? "r" : ddd < 0 ? "o":"g");
+
+  setText("r-rr", fmtRR(rr));
+  document.getElementById("r-rr").className = "stat-v " + (rr >= 1 ? "g":"o");
+
+  setText("r-pf", Number(pf).toFixed(2));
+  document.getElementById("r-pf").className = "stat-v " + (pf >= 1 ? "g":"r");
+  setPbar("pb-pf", Math.min((pf / 3) * 100, 100));
+
+  setText("r-bal", fmt$(bal));
+  setText("r-eq",  fmt$(eq));
+  document.getElementById("r-eq").className = "stat-v " + (eq >= bal ? "g":"r");
+
+  /* Open Positions */
+  setText("op-count", opos);
+  setText("op-pnl",   fmt$(opnl));
+  document.getElementById("op-pnl").className = "open-pnl " + (opnl >= 0 ? "g":"r");
+}
+
+function showError(msg) {
+  const dot  = document.getElementById("statusDot");
+  const stxt = document.getElementById("statusText");
+  const err  = document.getElementById("errBanner");
+  const emsg = document.getElementById("errMsg");
+  dot.className    = "dot error";
+  stxt.textContent = "Offline";
+  err.style.display = "block";
+  emsg.textContent  = msg;
+}
+
+/* ══════════════════════════════════════════════════════
+   THEME TOGGLE  —  auto from device + manual override
+══════════════════════════════════════════════════════ */
+const root      = document.documentElement;
+const togIcon   = document.getElementById("togIcon");
+const togLabel  = document.getElementById("togLabel");
+
+// Read saved preference or detect device
+const saved = localStorage.getItem("theme");
+const sysDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+function applyTheme(theme) {
+  if(theme === "dark") {
+    root.setAttribute("data-theme", "dark");
+    togIcon.textContent  = "🌙";
+    togLabel.textContent = "Dark";
+  } else {
+    root.setAttribute("data-theme", "light");
+    togIcon.textContent  = "☀️";
+    togLabel.textContent = "Light";
+  }
+  // Update chart colors for the active theme
+  updateChartTheme(theme);
+}
+
+function toggleTheme() {
+  const current = root.getAttribute("data-theme") ||
+                  (sysDark.matches ? "dark" : "light");
+  const next = current === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+}
+
+function updateChartTheme(theme) {
+  const isDark = theme === "dark";
+  const tickColor  = isDark ? "#3a4a62" : "#8fa3bc";
+  const gridColor  = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,50,120,0.07)";
+  [barChart].forEach(ch => {
+    if(!ch) return;
+    ch.options.scales.x.ticks.color = tickColor;
+    ch.options.scales.y.ticks.color = tickColor;
+    ch.options.scales.x.grid.color  = gridColor;
+    ch.options.scales.y.grid.color  = gridColor;
+    ch.update("none");
+  });
+}
+
+// Listen for system preference changes (no manual override saved)
+sysDark.addEventListener("change", e => {
+  if(!localStorage.getItem("theme")) applyTheme(e.matches ? "dark" : "light");
+});
+
+// Init: saved > system
+if(saved) {
+  applyTheme(saved);
+} else {
+  applyTheme(sysDark.matches ? "dark" : "light");
+}
+
+/* ══════════════════════════════════════════════════════
+   BOOT
+══════════════════════════════════════════════════════ */
+connectSSE();
+pollFallback();
+refreshAccountTabs();
+acctPollTimer = setInterval(refreshAccountTabs, 5000);
+</script>
+</body>
+</html>

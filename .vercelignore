@@ -1,0 +1,8 @@
+.claude/
+*.mq5
+*.ex5
+*.bat
+*.py
+*.json.bak
+compile_log.txt
+gold_performance.json

@@ -1,0 +1,8 @@
+.vercel
+.claude/
+__pycache__/
+*.pyc
+gold_performance.json
+compile_log.txt
+*.ex5
+.env
