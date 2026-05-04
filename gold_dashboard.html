@@ -372,7 +372,13 @@ header::after {
   position:absolute; top:0; left:0; right:0; height:1px;
   background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent);
 }
-.kpi-icon { font-size: 22px; margin-bottom: 10px; }
+.kpi-icon {
+  width: 26px; height: 26px;
+  margin-bottom: 10px; color: var(--cyan2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.kpi-icon svg { width: 100%; height: 100%; stroke-width: 1.8; }
+.hd-icon svg  { width: 24px; height: 24px; stroke-width: 1.8; color: var(--cyan); }
 .kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; }
 .kpi-val {
   font-family: 'JetBrains Mono', monospace;
@@ -700,7 +706,7 @@ body::before {
 <!-- ── HEADER ── -->
 <header>
   <div class="hd-left">
-    <div class="hd-icon">📊</div>
+    <div class="hd-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-7"/></svg></div>
     <div>
       <div class="hd-title">GOLD PERFORMANCE TRACKER</div>
       <div class="hd-sub" id="hd-sub-text">Yang Fi &nbsp;·&nbsp; MT5 Live Monitor &nbsp;·&nbsp; XAUUSD</div>
@@ -763,7 +769,7 @@ body::before {
 
   <!-- Win Rate ring -->
   <div class="kpi" id="kpi-wr">
-    <div class="kpi-icon">🎯</div>
+    <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
     <div class="kpi-label">Win Rate</div>
     <div class="wr-ring-wrap">
       <canvas id="wrRing" width="72" height="72"></canvas>
@@ -774,7 +780,7 @@ body::before {
 
   <!-- Total PnL -->
   <div class="kpi" id="kpi-pnl">
-    <div class="kpi-icon">💵</div>
+    <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
     <div class="kpi-label">Total PnL</div>
     <div class="kpi-val" id="kv-pnl">--</div>
     <div class="kpi-sub" id="kv-pnl-sub">-- trades closed</div>
@@ -782,7 +788,7 @@ body::before {
 
   <!-- Profit Factor -->
   <div class="kpi" id="kpi-pf">
-    <div class="kpi-icon">⚖️</div>
+    <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 7h18"/><path d="M5 7l-2 6a4 4 0 0 0 8 0L9 7"/><path d="M19 7l-2 6a4 4 0 0 0 8 0L21 7"/></svg></div>
     <div class="kpi-label">Profit Factor</div>
     <div class="kpi-val" id="kv-pf">--</div>
     <div class="kpi-sub">Win $ ÷ Loss $</div>
@@ -790,7 +796,7 @@ body::before {
 
   <!-- Max Drawdown -->
   <div class="kpi">
-    <div class="kpi-icon">📉</div>
+    <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg></div>
     <div class="kpi-label">Max Drawdown</div>
     <div class="kpi-val r" id="kv-dd">--</div>
     <div class="kpi-sub" id="kv-dd-pct">--%</div>
@@ -798,7 +804,7 @@ body::before {
 
   <!-- Avg R:R -->
   <div class="kpi" id="kpi-rr">
-    <div class="kpi-icon">🏹</div>
+    <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M12 22v-8"/><circle cx="12" cy="12" r="2"/><path d="M5 12H2"/><path d="M22 12h-3"/><path d="M5 5l2 2"/><path d="M17 17l2 2"/><path d="M5 19l2-2"/><path d="M17 7l2-2"/></svg></div>
     <div class="kpi-label">Avg R : R</div>
     <div class="kpi-val" id="kv-rr">--</div>
     <div class="kpi-sub">Risk / Reward</div>
@@ -965,14 +971,14 @@ body::before {
 
 <!-- ── INSTALL PROMPT (PWA) ── -->
 <button class="install-fab" id="installFab" type="button">
-  <span class="ico">📲</span>
+  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:block"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/><path d="M9 7h6"/></svg></span>
   <span>Install App</span>
   <span class="x" id="installDismiss" title="Dismiss">×</span>
 </button>
 
 <div class="ios-install-modal" id="iosInstallModal">
   <div class="ios-install-card">
-    <h3>📲 Install on iPhone</h3>
+    <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:inline-block;vertical-align:-3px;margin-right:6px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/><path d="M9 7h6"/></svg>Install on iPhone</h3>
     <p>Get the dashboard as an app on your home screen:</p>
     <ol>
       <li>Tap the <b>Share</b> button (square with up arrow) in Safari's bottom toolbar</li>
