@@ -287,6 +287,12 @@ header::after {
 }
 .tab-badge.live { background:rgba(0,230,118,.12); color:var(--green); }
 .tab-badge.demo { background:rgba(0,212,255,.12);  color:var(--cyan); }
+.tab-seen { font-size:9px; color:var(--muted); margin-top:2px; font-family:'JetBrains Mono',monospace; }
+.tab-seen.live  { color:var(--green); }
+.tab-seen.warn  { color:var(--orange); }
+.tab-seen.stale { color:var(--red); }
+.acct-tab.stale { opacity:.55; border-color: rgba(255,61,90,0.3); }
+#acctSearch:focus { border-color: var(--cyan) !important; }
 
 /* ─── ACCOUNT STRIP ─── */
 .acct-strip {
@@ -548,10 +554,14 @@ footer a:hover { opacity:1; }
 <!-- ── ERROR ── -->
 <div class="err-banner" id="errBanner">⚠ &nbsp;<span id="errMsg"></span></div>
 
-<!-- ── ACCOUNT SWITCHER (shown when >1 account) ── -->
+<!-- ── ACCOUNT SWITCHER ── -->
 <div class="acct-switcher" id="acctSwitcher" style="display:none">
-  <span class="acct-switcher-label">Accounts</span>
-  <div class="acct-tabs" id="acctTabs"></div>
+  <span class="acct-switcher-label">Accounts <span id="acctCount" style="color:var(--cyan);font-weight:700"></span></span>
+  <input type="text" id="acctSearch" placeholder="Search account #, name, or server…"
+         style="display:none;background:var(--surface);border:1px solid var(--border);
+         color:var(--text);padding:7px 12px;border-radius:8px;font-size:12px;
+         min-width:240px;outline:none;transition:border-color .15s">
+  <div class="acct-tabs" id="acctTabs" style="max-height:280px;overflow-y:auto"></div>
 </div>
 
 <!-- ── ACCOUNT STRIP ── -->
@@ -793,8 +803,11 @@ const SSE_URL      = "/api/stream";
 const API_URL      = "/api/performance";
 const ACCOUNTS_URL = "/api/accounts";
 const POLL_MS      = 8000;
+const LS_KEY_ACCT  = "tc_active_account";
 
-let activeAccount = null;
+let activeAccount = localStorage.getItem(LS_KEY_ACCT) || null;
+let allAccounts   = [];
+let acctFilter    = "";
 
 /* ══════════════════════════════════════════════════════
    FORMATTING
@@ -953,55 +966,80 @@ async function pollFallback() {
 /* ══════════════════════════════════════════════════════
    ACCOUNT SWITCHER
 ══════════════════════════════════════════════════════ */
+function fmtSeenAge(sec) {
+  if(sec == null) return { txt: "—", cls: "" };
+  if(sec < 30)   return { txt: Math.round(sec) + "s ago", cls: "live" };
+  if(sec < 60)   return { txt: Math.round(sec) + "s ago", cls: "warn" };
+  if(sec < 3600) return { txt: Math.round(sec/60) + "m ago", cls: "stale" };
+  return { txt: Math.round(sec/3600) + "h ago", cls: "stale" };
+}
+
+function renderAccountTabs() {
+  const tabs = document.getElementById("acctTabs");
+  const f = acctFilter.toLowerCase().trim();
+  const list = !f ? allAccounts : allAccounts.filter(a =>
+    String(a.account_number).toLowerCase().includes(f) ||
+    (a.account_name||"").toLowerCase().includes(f) ||
+    (a.server||"").toLowerCase().includes(f)
+  );
+
+  tabs.innerHTML = "";
+  list.forEach(a => {
+    const tab = document.createElement("div");
+    const stale = a.stale ? " stale" : "";
+    tab.className = "acct-tab" + (String(activeAccount) === String(a.account_number) ? " active" : "") + stale;
+    tab.id = "tab-" + a.account_number;
+    const badge = a.account_type === "Live"
+      ? `<span class="tab-badge live">LIVE</span>`
+      : `<span class="tab-badge demo">DEMO</span>`;
+    const seen = fmtSeenAge(a.last_seen_sec);
+    tab.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="tab-no">#${a.account_number}</span>${badge}
+      </div>
+      <span class="tab-name">${a.account_name}</span>
+      <span class="tab-srv">${a.server}</span>
+      <span class="tab-bal ${a.equity >= a.balance ? 'g':'r'}" id="tab-bal-${a.account_number}">${fmt$(a.balance)}</span>
+      <span class="tab-seen ${seen.cls}">${a.stale ? "⚠ " : "● "}${seen.txt}</span>
+    `;
+    tab.onclick = () => switchAccount(a.account_number);
+    tabs.appendChild(tab);
+  });
+}
+
 async function refreshAccountTabs() {
   try {
     const res  = await fetch(ACCOUNTS_URL + "?_=" + Date.now());
     const data = await res.json();
-    const list = data.accounts || [];
+    allAccounts = data.accounts || [];
 
     const switcher = document.getElementById("acctSwitcher");
-    const tabs     = document.getElementById("acctTabs");
+    const search   = document.getElementById("acctSearch");
+    const count    = document.getElementById("acctCount");
 
-    if(list.length <= 1){ switcher.style.display = "none"; return; }
+    if(allAccounts.length === 0){ switcher.style.display = "none"; return; }
     switcher.style.display = "flex";
+    count.textContent = "(" + allAccounts.length + ")";
+    search.style.display = allAccounts.length >= 5 ? "" : "none";
 
-    const ids = list.map(a => a.account_number).join(",");
-    if(tabs.dataset.ids === ids) {
-      list.forEach(a => {
-        const balEl = document.getElementById("tab-bal-" + a.account_number);
-        if(balEl) balEl.textContent = fmt$(a.balance);
-      });
-      return;
+    // Validate active account still exists
+    const validActive = allAccounts.find(a => String(a.account_number) === String(activeAccount));
+    if(activeAccount && !validActive){
+      activeAccount = null;
+      localStorage.removeItem(LS_KEY_ACCT);
     }
-    tabs.dataset.ids = ids;
-    tabs.innerHTML = "";
 
-    list.forEach(a => {
-      const tab = document.createElement("div");
-      tab.className = "acct-tab" + (activeAccount === a.account_number ? " active" : "");
-      tab.id = "tab-" + a.account_number;
-      const badge = a.account_type === "Live"
-        ? `<span class="tab-badge live">LIVE</span>`
-        : `<span class="tab-badge demo">DEMO</span>`;
-      tab.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span class="tab-no">#${a.account_number}</span>${badge}
-        </div>
-        <span class="tab-name">${a.account_name}</span>
-        <span class="tab-srv">${a.server}</span>
-        <span class="tab-bal ${a.equity >= a.balance ? 'g':'r'}" id="tab-bal-${a.account_number}">${fmt$(a.balance)}</span>
-      `;
-      tab.onclick = () => switchAccount(a.account_number);
-      tabs.appendChild(tab);
-    });
+    renderAccountTabs();
 
-    if(!activeAccount) switchAccount(list[0].account_number);
-
+    if(!activeAccount && allAccounts.length > 0) {
+      switchAccount(allAccounts[0].account_number);
+    }
   } catch(_) {}
 }
 
 async function switchAccount(no) {
   activeAccount = String(no);
+  localStorage.setItem(LS_KEY_ACCT, activeAccount);
   document.querySelectorAll(".acct-tab").forEach(t => t.classList.remove("active"));
   const sel = document.getElementById("tab-" + no);
   if(sel) sel.classList.add("active");
@@ -1010,6 +1048,15 @@ async function switchAccount(no) {
     render(await res.json());
   } catch(_) {}
 }
+
+// Search filter — re-render tabs as user types
+document.addEventListener("DOMContentLoaded", () => {
+  const search = document.getElementById("acctSearch");
+  if(search) search.addEventListener("input", e => {
+    acctFilter = e.target.value;
+    renderAccountTabs();
+  });
+});
 
 /* ══════════════════════════════════════════════════════
    RENDER

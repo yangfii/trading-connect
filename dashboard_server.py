@@ -35,11 +35,12 @@ HOST  = "0.0.0.0"
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")  # if empty, /api/push is open (local dev)
 
 # ─── In-memory data store ────────────────────────────────────────────────────
-_lock       = threading.Lock()
-_latest     = {}          # most-recent push (any account)
-_accounts   = {}          # {account_number: {...snapshot...}}
-_push_count = 0
-_last_push  = None        # datetime of last push
+_lock          = threading.Lock()
+_latest        = {}       # most-recent push (any account)
+_accounts      = {}       # {account_number: {...snapshot...}}
+_account_seen  = {}       # {account_number: datetime of last push}
+_push_count    = 0
+_last_push     = None     # datetime of last push
 
 # ─── Fallback: scan MT5 file folders ─────────────────────────────────────────
 JSON_FILE = "gold_performance.json"
@@ -134,6 +135,7 @@ def api_push():
         # store per-account snapshot
         _accounts[acct_no] = dict(data)
         _accounts[acct_no]["_account_no"] = acct_no
+        _account_seen[acct_no] = now
         _push_count += 1
         _last_push   = now
 
@@ -173,12 +175,15 @@ def api_performance():
 @app.route("/api/accounts")
 def api_accounts():
     """List all connected MT5 accounts with summary info."""
+    now = datetime.now()
     with _lock:
         accts = {}
         for no, snap in _accounts.items():
             meta = snap.get("meta", {})
             acct_data = snap.get("account", {})
             perf = snap.get("performance", {})
+            seen = _account_seen.get(no)
+            age = (now - seen).total_seconds() if seen else None
             accts[no] = {
                 "account_number": no,
                 "account_name":   meta.get("account_name", "—"),
@@ -195,11 +200,20 @@ def api_accounts():
                 "total_trades":   perf.get("total_trades", 0),
                 "symbol":         snap.get("symbol",       "XAUUSD"),
                 "updated":        snap.get("updated",      "—"),
+                "last_seen_sec":  age,
+                "last_seen_at":   seen.strftime("%Y-%m-%d %H:%M:%S") if seen else None,
+                "stale":          (age is not None and age > 60),
             }
+
+    # Sort: live (recently seen) first, then by last_seen ascending (most recent first)
+    sorted_accts = sorted(
+        accts.values(),
+        key=lambda a: (a["stale"], a["last_seen_sec"] if a["last_seen_sec"] is not None else 1e9)
+    )
 
     resp = jsonify({
         "count":    len(accts),
-        "accounts": list(accts.values()),
+        "accounts": sorted_accts,
     })
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Cache-Control"] = "no-cache"
