@@ -844,6 +844,23 @@ body::before {
 
 <!-- ── CHARTS ROW ── -->
 <div class="section-label">Analytics</div>
+
+<!-- Line: Performance Over Time (full width) -->
+<div class="chart-card" style="margin-bottom:14px">
+  <h3>
+    Performance Over Time
+    <span style="margin-left:auto;display:flex;gap:6px;font-size:10px">
+      <button class="perf-range" data-range="60"   style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:10px">1m</button>
+      <button class="perf-range" data-range="300"  style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:10px">5m</button>
+      <button class="perf-range" data-range="1800" style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:10px">30m</button>
+      <button class="perf-range active" data-range="0" style="background:rgba(0,212,255,0.12);border:1px solid var(--cyan);color:var(--cyan);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:10px">All</button>
+    </span>
+  </h3>
+  <div class="chart-wrap">
+    <canvas id="perfLine" height="120"></canvas>
+  </div>
+</div>
+
 <div class="charts-row">
 
   <!-- Donut: Win vs Loss -->
@@ -1213,6 +1230,167 @@ const wrRing = new Chart(wrCtx, {
 });
 
 /* ══════════════════════════════════════════════════════
+   CHART: Performance Over Time (line)
+══════════════════════════════════════════════════════ */
+const PERF_HISTORY_MAX = 500;          // cap stored points per account
+const LS_KEY_PERF      = "tc_perf_hist"; // localStorage key prefix
+
+let perfRangeSec = 0; // 0 = all
+
+function _perfKey(acctNo) { return LS_KEY_PERF + ":" + (acctNo || "unknown"); }
+
+function loadPerfHistory(acctNo) {
+  try {
+    const raw = localStorage.getItem(_perfKey(acctNo));
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch(_) { return []; }
+}
+
+function savePerfHistory(acctNo, hist) {
+  try {
+    localStorage.setItem(_perfKey(acctNo), JSON.stringify(hist));
+  } catch(_) { /* quota — silent */ }
+}
+
+const perfCtx = document.getElementById("perfLine").getContext("2d");
+const perfChart = new Chart(perfCtx, {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: "Balance",
+        data: [],
+        borderColor: "rgba(0,212,255,0.95)",
+        backgroundColor: "rgba(0,212,255,0.10)",
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: true,
+      },
+      {
+        label: "Equity",
+        data: [],
+        borderColor: "rgba(0,230,118,0.95)",
+        backgroundColor: "rgba(0,230,118,0.08)",
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: true,
+      },
+      {
+        label: "Total PnL",
+        data: [],
+        borderColor: "rgba(255,180,40,0.95)",
+        backgroundColor: "rgba(255,180,40,0.08)",
+        borderWidth: 2,
+        borderDash: [4, 4],
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: false,
+        yAxisID: "y1",
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: "bottom",
+        labels: { color: "#8fa3bc", font: { size: 11 }, boxWidth: 12, boxHeight: 12, usePointStyle: true },
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.raw).toLocaleString("en", {minimumFractionDigits:2, maximumFractionDigits:2})}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: "#3a4a62", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+        grid:  { color: "rgba(255,255,255,0.03)" },
+      },
+      y: {
+        position: "left",
+        ticks: { color: "#3a4a62", font: { size: 10 }, callback: v => "$" + Number(v).toLocaleString("en") },
+        grid:  { color: "rgba(255,255,255,0.05)" },
+      },
+      y1: {
+        position: "right",
+        ticks: { color: "rgba(255,180,40,0.85)", font: { size: 10 }, callback: v => "$" + Number(v).toLocaleString("en") },
+        grid:  { drawOnChartArea: false },
+      },
+    },
+    animation: { duration: 250 },
+  },
+});
+
+function _fmtTime(ts) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+function renderPerfChart(hist) {
+  const cutoff = perfRangeSec > 0 ? Date.now() - perfRangeSec * 1000 : 0;
+  const slice  = cutoff ? hist.filter(p => p.t >= cutoff) : hist;
+  perfChart.data.labels = slice.map(p => _fmtTime(p.t));
+  perfChart.data.datasets[0].data = slice.map(p => p.balance);
+  perfChart.data.datasets[1].data = slice.map(p => p.equity);
+  perfChart.data.datasets[2].data = slice.map(p => p.pnl);
+  perfChart.update("none");
+}
+
+function pushPerfPoint(acctNo, balance, equity, pnl) {
+  const hist = loadPerfHistory(acctNo);
+  const last = hist[hist.length - 1];
+  const point = { t: Date.now(), balance, equity, pnl };
+
+  // De-dup: skip if values unchanged AND last point was within 2s
+  if (last
+      && last.balance === balance
+      && last.equity  === equity
+      && last.pnl     === pnl
+      && (point.t - last.t) < 2000) {
+    return hist;
+  }
+
+  hist.push(point);
+  if (hist.length > PERF_HISTORY_MAX) hist.splice(0, hist.length - PERF_HISTORY_MAX);
+  savePerfHistory(acctNo, hist);
+  return hist;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".perf-range").forEach(btn => {
+    btn.addEventListener("click", () => {
+      perfRangeSec = parseInt(btn.dataset.range, 10) || 0;
+      document.querySelectorAll(".perf-range").forEach(b => {
+        b.classList.remove("active");
+        b.style.background  = "transparent";
+        b.style.borderColor = "var(--border)";
+        b.style.color       = "var(--text2)";
+      });
+      btn.classList.add("active");
+      btn.style.background  = "rgba(0,212,255,0.12)";
+      btn.style.borderColor = "var(--cyan)";
+      btn.style.color       = "var(--cyan)";
+      renderPerfChart(loadPerfHistory(activeAccount));
+    });
+  });
+});
+
+/* ══════════════════════════════════════════════════════
    HELPERS
 ══════════════════════════════════════════════════════ */
 /* Track previous numeric values to drive direction-aware animations */
@@ -1463,6 +1641,8 @@ async function switchAccount(no) {
   document.querySelectorAll(".acct-tab").forEach(t => t.classList.remove("active"));
   const sel = document.getElementById("tab-" + no);
   if(sel) sel.classList.add("active");
+  // Repaint chart with this account's history before the fetch resolves
+  renderPerfChart(loadPerfHistory(activeAccount));
   try {
     const res = await fetch(API_URL + "?account=" + no + "&_=" + Date.now());
     render(await res.json());
@@ -1534,6 +1714,11 @@ function render(d) {
   const ddp  = Math.abs(risk.max_drawdown_pct || 0);
   const ddd  = risk.daily_dd_pct     || 0;
   const rr   = risk.avg_rr           || 0;
+
+  /* Performance line chart: append a point and re-render */
+  const _perfAcct = String(acctNo || "unknown");
+  const _hist = pushPerfPoint(_perfAcct, bal, eq, pnl);
+  renderPerfChart(_hist);
 
   /* Account Strip */
   setText("ac-val-bal", fmt$(bal));
@@ -1674,6 +1859,14 @@ function updateChartTheme(theme) {
     ch.options.scales.y.grid.color  = gridColor;
     ch.update("none");
   });
+  if (typeof perfChart !== "undefined" && perfChart) {
+    perfChart.options.scales.x.ticks.color = tickColor;
+    perfChart.options.scales.y.ticks.color = tickColor;
+    perfChart.options.scales.x.grid.color  = gridColor;
+    perfChart.options.scales.y.grid.color  = gridColor;
+    perfChart.options.plugins.legend.labels.color = tickColor;
+    perfChart.update("none");
+  }
 }
 
 // Listen for system preference changes (no manual override saved)
