@@ -2,6 +2,7 @@
 .claude/
 __pycache__/
 *.pyc
+.pytest_cache/
 gold_performance.json
 compile_log.txt
 *.ex5

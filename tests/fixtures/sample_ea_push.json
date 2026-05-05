@@ -1,0 +1,39 @@
+{
+  "source": "MT5_EA",
+  "updated": "2026-05-04 14:22:31",
+  "symbol": "XAUUSD",
+  "account_number": 87654321,
+  "meta": {
+    "account_number": 87654321,
+    "account_name": "Yang Fi - Prop",
+    "server": "FTMO-Demo",
+    "currency": "USD",
+    "leverage": 100,
+    "account_type": "Demo",
+    "group": "Prop"
+  },
+  "account": {
+    "balance": 100000.00,
+    "equity": 102345.67,
+    "open_pnl": 2345.67,
+    "open_pos": 3
+  },
+  "performance": {
+    "total_trades": 142,
+    "win_trades": 89,
+    "loss_trades": 53,
+    "win_rate": 62.68,
+    "total_pnl": 8923.45,
+    "profit_factor": 1.92,
+    "avg_win": 178.34,
+    "avg_loss": -92.15,
+    "best_trade": 1245.00,
+    "worst_trade": -485.50
+  },
+  "risk": {
+    "max_drawdown": -1820.45,
+    "max_drawdown_pct": -1.82,
+    "daily_dd_pct": -0.45,
+    "avg_rr": 1.94
+  }
+}
