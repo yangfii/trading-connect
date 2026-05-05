@@ -26,7 +26,9 @@
 //| Inputs                                                           |
 //+------------------------------------------------------------------+
 input group "=== Server Connection ==="
-input string   InpServerURL    = "http://127.0.0.1:5000/api/push"; // Web Server URL
+input string   InpServerURL    = "http://127.0.0.1:5000/api/push"; // Push URL
+input string   InpCommandURL   = "http://127.0.0.1:5000/api/commands"; // Command poll URL
+input string   InpAckURL       = "http://127.0.0.1:5000/api/command/ack"; // Command ack URL
 input string   InpAuthToken    = "";            // Auth token (must match server AUTH_TOKEN)
 input string   InpAccountGroup = "";            // Group label: Prop / Personal / Demo / Live (optional)
 input int      InpTimeout      = 3000;          // HTTP timeout (ms)
@@ -35,6 +37,10 @@ input group "=== Update Settings ==="
 input int      InpUpdateSecs   = 5;             // Push interval (seconds)
 input bool     InpFileBackup   = true;          // Also write JSON file (backup)
 input string   InpJSONFile     = "gold_performance.json"; // Backup JSON filename
+
+input group "=== Trade Controls (from web app) ==="
+input bool     InpAllowCommands = true;         // Allow web app to close positions
+input bool     InpRequireDemoOnly = false;      // Refuse commands on LIVE accounts (extra safety)
 
 input group "=== Trade Filter ==="
 input string   InpSymbol       = "";            // Symbol (empty = auto-detect from chart)
@@ -108,6 +114,170 @@ void OnTick() {
 
 void OnTimer() {
    DoPush();
+   if(InpAllowCommands) PollCommands();
+}
+
+#include <Trade/Trade.mqh>
+CTrade _trade;
+
+//+------------------------------------------------------------------+
+//| Poll the server for pending close-position commands and execute  |
+//+------------------------------------------------------------------+
+void PollCommands() {
+   long acctNo = AccountInfoInteger(ACCOUNT_LOGIN);
+   string url  = InpCommandURL + "?account=" + IntegerToString(acctNo);
+
+   string headers = "X-Source: MT5-EA\r\n";
+   if(InpAuthToken != "")
+      headers += "X-Auth-Token: " + InpAuthToken + "\r\n";
+
+   char  empty[];
+   char  resp[];
+   string respHdr;
+
+   ResetLastError();
+   int code = WebRequest("GET", url, headers, InpTimeout, empty, resp, respHdr);
+   if(code != 200) {
+      if(GetLastError() == 5203)
+         Print("🔒 Command poll blocked. Add '", InpCommandURL,
+               "' to MT5 allowed URLs.");
+      return;
+   }
+
+   string body = CharArrayToString(resp, 0, WHOLE_ARRAY, CP_UTF8);
+   ProcessCommandsResponse(body);
+}
+
+//+------------------------------------------------------------------+
+//| Tiny JSON helpers — extract a string between two markers         |
+//+------------------------------------------------------------------+
+string _ExtractStringField(const string &src, const string &key, int from = 0) {
+   string needle = "\"" + key + "\":\"";
+   int p = StringFind(src, needle, from);
+   if(p < 0) return "";
+   p += StringLen(needle);
+   int q = StringFind(src, "\"", p);
+   if(q < 0) return "";
+   return StringSubstr(src, p, q - p);
+}
+
+int _FindNextCommandStart(const string &src, int from) {
+   // Each command is an object inside the "commands":[ ... ] array.
+   return StringFind(src, "{", from);
+}
+
+//+------------------------------------------------------------------+
+//| Parse the JSON response and dispatch each command                |
+//+------------------------------------------------------------------+
+void ProcessCommandsResponse(const string &body) {
+   // Locate the commands array; bail if empty.
+   int arrStart = StringFind(body, "\"commands\":[");
+   if(arrStart < 0) return;
+   arrStart += StringLen("\"commands\":[");
+   int arrEnd = StringFind(body, "]", arrStart);
+   if(arrEnd < 0 || arrEnd <= arrStart) return;
+
+   string arr = StringSubstr(body, arrStart, arrEnd - arrStart);
+   if(StringLen(arr) < 5) return; // empty array
+
+   // Walk objects within the array, one by one.
+   int cur = 0;
+   while(cur < StringLen(arr)) {
+      int objStart = _FindNextCommandStart(arr, cur);
+      if(objStart < 0) break;
+      int objEnd = StringFind(arr, "}", objStart);
+      if(objEnd < 0) break;
+
+      string obj = StringSubstr(arr, objStart, objEnd - objStart + 1);
+      string id   = _ExtractStringField(obj, "id");
+      string type = _ExtractStringField(obj, "type");
+
+      if(id != "" && type != "")
+         ExecuteCommand(id, type);
+
+      cur = objEnd + 1;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Execute a single command and ack the server                      |
+//+------------------------------------------------------------------+
+void ExecuteCommand(const string &id, const string &type) {
+   if(InpRequireDemoOnly &&
+      AccountInfoInteger(ACCOUNT_TRADE_MODE) != ACCOUNT_TRADE_MODE_DEMO) {
+      AckCommand(id, "failed", "blocked: live account, InpRequireDemoOnly=true");
+      return;
+   }
+
+   int closed = 0;
+   string err = "";
+
+   if(type == "close_all")        closed = CloseDirection(-1, err);
+   else if(type == "close_buys")  closed = CloseDirection(POSITION_TYPE_BUY, err);
+   else if(type == "close_sells") closed = CloseDirection(POSITION_TYPE_SELL, err);
+   else {
+      AckCommand(id, "failed", "unknown command type: " + type);
+      return;
+   }
+
+   string status = (err == "") ? "done" : "failed";
+   string result = "closed=" + IntegerToString(closed) + (err == "" ? "" : "; err=" + err);
+   AckCommand(id, status, result);
+   Print("🛰  Command ", type, " (", id, ") -> ", status, " (", result, ")");
+}
+
+//+------------------------------------------------------------------+
+//| Close all positions matching direction (-1 = both, BUY, SELL)    |
+//| Honours InpSymbol and InpMagic filters.                          |
+//+------------------------------------------------------------------+
+int CloseDirection(int direction, string &errOut) {
+   string sym = (InpSymbol == "") ? Symbol() : InpSymbol;
+   int closed = 0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong tkt = PositionGetTicket(i);
+      if(!tkt) continue;
+      if(sym != "" && PositionGetString(POSITION_SYMBOL) != sym) continue;
+      if(InpMagic != 0 && PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
+
+      long ptype = PositionGetInteger(POSITION_TYPE);
+      if(direction != -1 && ptype != direction) continue;
+
+      if(_trade.PositionClose(tkt)) {
+         closed++;
+      } else {
+         if(errOut != "") errOut += "; ";
+         errOut += "ticket " + IntegerToString((long)tkt) +
+                   " err=" + IntegerToString(_trade.ResultRetcode());
+      }
+   }
+   return closed;
+}
+
+//+------------------------------------------------------------------+
+//| Send command-ack POST to /api/command/ack                        |
+//+------------------------------------------------------------------+
+void AckCommand(const string &id, const string &status, const string &result) {
+   // Escape result for JSON
+   string safeResult = result;
+   StringReplace(safeResult, "\"", "'");
+
+   string json = "{\"id\":\"" + id + "\",\"status\":\"" + status +
+                 "\",\"result\":\"" + safeResult + "\"}";
+
+   char body[];
+   char resp[];
+   string respHdr;
+   string headers = "Content-Type: application/json\r\nX-Source: MT5-EA\r\n";
+   if(InpAuthToken != "")
+      headers += "X-Auth-Token: " + InpAuthToken + "\r\n";
+
+   int len = StringToCharArray(json, body, 0, WHOLE_ARRAY, CP_UTF8) - 1;
+   if(len <= 0) return;
+   ArrayResize(body, len);
+
+   ResetLastError();
+   WebRequest("POST", InpAckURL, headers, InpTimeout, body, resp, respHdr);
 }
 
 //+------------------------------------------------------------------+
