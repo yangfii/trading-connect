@@ -475,6 +475,81 @@ header::after {
 .donut-leg-left { display:flex;align-items:center;gap:8px;color:var(--text2); }
 .donut-leg-dot  { width:10px;height:10px;border-radius:3px; }
 
+/* ─── TRADE CONTROLS ─── */
+.trade-ctrl-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 22px;
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+.trade-ctrl-card::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(255,180,40,0.35), transparent);
+}
+.trade-ctrl-row {
+  display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.trade-ctrl-info { flex: 1; min-width: 200px; }
+.trade-ctrl-title {
+  font-size: 12px; color: var(--text); font-weight: 600;
+  letter-spacing: 0.4px;
+}
+.trade-ctrl-title #tc-acct { color: var(--cyan); font-weight: 700; }
+.trade-ctrl-sub {
+  font-size: 11px; color: var(--text2); margin-top: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.trade-ctrl-sub.ok    { color: var(--green); }
+.trade-ctrl-sub.err   { color: var(--red); }
+.trade-ctrl-sub.busy  { color: var(--cyan); }
+.trade-ctrl-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.tc-btn {
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.6px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s ease;
+  background: transparent;
+}
+.tc-btn:hover     { transform: translateY(-1px); }
+.tc-btn:active    { transform: translateY(0); }
+.tc-btn:disabled  { opacity: 0.5; cursor: not-allowed; transform: none; }
+.tc-buy   { color: var(--green); border-color: rgba(0,230,118,0.5); }
+.tc-buy:hover:not(:disabled)  { background: rgba(0,230,118,0.10); }
+.tc-sell  { color: var(--red);   border-color: rgba(255,61,90,0.5); }
+.tc-sell:hover:not(:disabled) { background: rgba(255,61,90,0.10); }
+.tc-all   { color: #ffb428;      border-color: rgba(255,180,40,0.5); }
+.tc-all:hover:not(:disabled)  { background: rgba(255,180,40,0.10); }
+
+.trade-ctrl-history {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.trade-ctrl-history-label {
+  font-size: 10px; color: var(--text2); letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.trade-ctrl-history ul {
+  list-style: none; margin: 0; padding: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+.trade-ctrl-history li {
+  padding: 3px 0; color: var(--text2);
+  display: flex; gap: 10px; align-items: baseline;
+}
+.trade-ctrl-history li .tc-h-time { color: var(--text2); opacity: 0.7; min-width: 70px; }
+.trade-ctrl-history li .tc-h-type { color: var(--cyan); min-width: 110px; }
+.trade-ctrl-history li.tc-h-done   .tc-h-status { color: var(--green); }
+.trade-ctrl-history li.tc-h-failed .tc-h-status { color: var(--red); }
+.trade-ctrl-history li.tc-h-pending .tc-h-status { color: #ffb428; }
+
 /* ─── BOTTOM STATS ROW ─── */
 .bottom-row {
   display: grid;
@@ -791,6 +866,26 @@ body::before {
     <div class="acct-label">Open Positions</div>
     <div class="acct-val" id="ac-val-opos">--</div>
     <div class="acct-sub">active trades</div>
+  </div>
+</div>
+
+<!-- ── TRADE CONTROLS ── -->
+<div class="section-label">Trade Controls</div>
+<div class="trade-ctrl-card">
+  <div class="trade-ctrl-row">
+    <div class="trade-ctrl-info">
+      <div class="trade-ctrl-title">Close positions on <span id="tc-acct">—</span></div>
+      <div class="trade-ctrl-sub" id="tc-status">Idle</div>
+    </div>
+    <div class="trade-ctrl-buttons">
+      <button class="tc-btn tc-buy"  id="btn-close-buys"  type="button">Close Buys</button>
+      <button class="tc-btn tc-sell" id="btn-close-sells" type="button">Close Sells</button>
+      <button class="tc-btn tc-all"  id="btn-close-all"   type="button">Close All</button>
+    </div>
+  </div>
+  <div class="trade-ctrl-history" id="tc-history" style="display:none">
+    <div class="trade-ctrl-history-label">Recent commands</div>
+    <ul id="tc-history-list"></ul>
   </div>
 </div>
 
@@ -1391,6 +1486,149 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ══════════════════════════════════════════════════════
+   TRADE CONTROLS — close buys / sells / all via /api/command
+══════════════════════════════════════════════════════ */
+const LS_KEY_CMD_TOKEN = "tc_cmd_token"; // localStorage key for AUTH_TOKEN
+
+function _getCommandToken() {
+  return localStorage.getItem(LS_KEY_CMD_TOKEN) || "";
+}
+
+function _setCommandToken(t) {
+  if (t) localStorage.setItem(LS_KEY_CMD_TOKEN, t);
+  else localStorage.removeItem(LS_KEY_CMD_TOKEN);
+}
+
+function _setTcStatus(text, cls) {
+  const el = document.getElementById("tc-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "trade-ctrl-sub" + (cls ? " " + cls : "");
+}
+
+function _setTcButtonsDisabled(disabled) {
+  ["btn-close-buys", "btn-close-sells", "btn-close-all"].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = disabled;
+  });
+}
+
+async function _postCommand(type) {
+  const acct = activeAccount;
+  if (!acct) {
+    _setTcStatus("Pick an account first.", "err");
+    return;
+  }
+
+  const labels = {
+    close_buys:  "Close ALL BUY positions",
+    close_sells: "Close ALL SELL positions",
+    close_all:   "Close ALL positions",
+  };
+
+  // Confirm — destructive operation on real money
+  const ok = window.confirm(
+    `${labels[type]} on account #${acct}?\n\nThis cannot be undone.`
+  );
+  if (!ok) return;
+
+  // Auth: prompt for token if server requires one and we don't have it cached
+  let token = _getCommandToken();
+  // We can't introspect AUTH_TOKEN from the server, so we attempt the request
+  // and prompt only if it returns 401.
+
+  _setTcButtonsDisabled(true);
+  _setTcStatus("Sending " + type + "...", "busy");
+
+  const send = async (tk) => fetch("/api/command", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(tk ? { "X-Auth-Token": tk } : {}),
+    },
+    body: JSON.stringify({ account: String(acct), type }),
+  });
+
+  try {
+    let res = await send(token);
+    if (res.status === 401) {
+      const entered = window.prompt(
+        "Server requires an auth token to send commands.\nEnter AUTH_TOKEN:",
+        token || ""
+      );
+      if (!entered) {
+        _setTcStatus("Cancelled — no token.", "err");
+        return;
+      }
+      _setCommandToken(entered);
+      res = await send(entered);
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      _setTcStatus("Failed: " + (err.error || res.status), "err");
+      return;
+    }
+
+    const body = await res.json();
+    _setTcStatus("Queued: " + body.command.type + " (id " + body.command.id.slice(0, 8) + "…)", "ok");
+    refreshTcHistory();
+  } catch (e) {
+    _setTcStatus("Network error: " + e.message, "err");
+  } finally {
+    _setTcButtonsDisabled(false);
+  }
+}
+
+async function refreshTcHistory() {
+  if (!activeAccount) return;
+  const token = _getCommandToken();
+  try {
+    const res = await fetch("/api/command/history?account=" + activeAccount, {
+      headers: token ? { "X-Auth-Token": token } : {},
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    const list = document.getElementById("tc-history-list");
+    const wrap = document.getElementById("tc-history");
+    if (!list || !wrap) return;
+
+    const all = [...body.pending, ...body.history].slice(-10).reverse();
+    if (all.length === 0) {
+      wrap.style.display = "none";
+      return;
+    }
+    wrap.style.display = "block";
+
+    list.innerHTML = all.map(c => {
+      const t = (c.acked_at || c.issued_at || "").split("T")[1] || c.issued_at || "—";
+      const stClass = c.status === "done" ? "tc-h-done"
+                    : c.status === "failed" ? "tc-h-failed"
+                    : "tc-h-pending";
+      const result = c.result ? ` — ${String(c.result).replace(/</g,"&lt;")}` : "";
+      return `<li class="${stClass}">`
+           + `<span class="tc-h-time">${t}</span>`
+           + `<span class="tc-h-type">${c.type}</span>`
+           + `<span class="tc-h-status">${c.status}${result}</span>`
+           + `</li>`;
+    }).join("");
+  } catch (_) { /* silent */ }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const wire = (id, type) => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener("click", () => _postCommand(type));
+  };
+  wire("btn-close-buys",  "close_buys");
+  wire("btn-close-sells", "close_sells");
+  wire("btn-close-all",   "close_all");
+
+  // Periodically refresh history so EA acks become visible without manual reload
+  setInterval(refreshTcHistory, 4000);
+});
+
+/* ══════════════════════════════════════════════════════
    HELPERS
 ══════════════════════════════════════════════════════ */
 /* Track previous numeric values to drive direction-aware animations */
@@ -1643,6 +1881,8 @@ async function switchAccount(no) {
   if(sel) sel.classList.add("active");
   // Repaint chart with this account's history before the fetch resolves
   renderPerfChart(loadPerfHistory(activeAccount));
+  // Refresh trade-controls history for the newly-selected account
+  refreshTcHistory();
   try {
     const res = await fetch(API_URL + "?account=" + no + "&_=" + Date.now());
     render(await res.json());
@@ -1719,6 +1959,10 @@ function render(d) {
   const _perfAcct = String(acctNo || "unknown");
   const _hist = pushPerfPoint(_perfAcct, bal, eq, pnl);
   renderPerfChart(_hist);
+
+  /* Trade controls: keep account label in sync */
+  const tcAcct = document.getElementById("tc-acct");
+  if (tcAcct) tcAcct.textContent = "#" + (acctNo || "—");
 
   /* Account Strip */
   setText("ac-val-bal", fmt$(bal));

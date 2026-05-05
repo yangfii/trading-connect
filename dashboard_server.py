@@ -24,7 +24,9 @@ import os
 import json
 import time
 import glob
+import uuid
 import threading
+from collections import deque
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, jsonify, send_file, Response, request, abort
@@ -41,6 +43,17 @@ _accounts      = {}       # {account_number: {...snapshot...}}
 _account_seen  = {}       # {account_number: datetime of last push}
 _push_count    = 0
 _last_push     = None     # datetime of last push
+
+# ─── Command queue (Dashboard -> EA) ─────────────────────────────────────────
+# Per-account FIFO of pending commands. EA polls /api/commands and acks via
+# /api/command/ack. Commands move from _cmd_pending[acct] to _cmd_history[acct]
+# when acked. Both protected by _cmd_lock.
+_cmd_lock     = threading.Lock()
+_cmd_pending  = {}        # {account_no: deque([{id, type, issued_at, ...}])}
+_cmd_history  = {}        # {account_no: deque(maxlen=50)} — last 50 acked
+_cmd_by_id    = {}        # {cmd_id: command_dict} for O(1) ack lookup
+
+ALLOWED_COMMAND_TYPES = {"close_all", "close_buys", "close_sells"}
 
 # ─── Fallback: scan MT5 file folders ─────────────────────────────────────────
 JSON_FILE = "gold_performance.json"
@@ -132,12 +145,22 @@ def pwa_apple_icon():
     return _send_static("apple-touch-icon.png", "image/png")
 
 
+def _check_auth():
+    """Return True if request is authorised, False otherwise.
+
+    When AUTH_TOKEN is unset (local dev), every request passes.
+    """
+    if not AUTH_TOKEN:
+        return True
+    return request.headers.get("X-Auth-Token", "") == AUTH_TOKEN
+
+
 @app.route("/api/push", methods=["POST"])
 def api_push():
     """EA sends real MT5 data here every N seconds."""
     global _push_count, _last_push
 
-    if AUTH_TOKEN and request.headers.get("X-Auth-Token", "") != AUTH_TOKEN:
+    if not _check_auth():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
     raw = request.get_data(as_text=True)
@@ -313,6 +336,150 @@ def api_status():
         "sse_clients":  len(_sse_clients),
         "data_source":  "mt5_push" if has_mem else ("file" if file_found else "none"),
     })
+
+
+# ─── Trade-control command endpoints ────────────────────────────────────────
+
+@app.route("/api/command", methods=["POST"])
+def api_command():
+    """Dashboard enqueues a command for an EA to pick up.
+
+    Body: {"account": "<account_no>", "type": "close_all"|"close_buys"|"close_sells"}
+    Auth: X-Auth-Token required when AUTH_TOKEN is set.
+    """
+    if not _check_auth():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    raw = request.get_data(as_text=True)
+    if not raw:
+        return jsonify({"ok": False, "error": "empty body"}), 400
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    acct = str(body.get("account") or "").strip()
+    cmd_type = str(body.get("type") or "").strip()
+    if not acct:
+        return jsonify({"ok": False, "error": "account required"}), 400
+    if cmd_type not in ALLOWED_COMMAND_TYPES:
+        return jsonify({
+            "ok": False,
+            "error": f"invalid type; allowed: {sorted(ALLOWED_COMMAND_TYPES)}",
+        }), 400
+
+    cmd = {
+        "id": uuid.uuid4().hex,
+        "account": acct,
+        "type": cmd_type,
+        "issued_at": datetime.now().isoformat(timespec="seconds"),
+        "status": "pending",
+    }
+
+    with _cmd_lock:
+        _cmd_pending.setdefault(acct, deque()).append(cmd)
+        _cmd_by_id[cmd["id"]] = cmd
+
+    return jsonify({"ok": True, "command": cmd}), 200
+
+
+@app.route("/api/commands", methods=["GET"])
+def api_commands():
+    """EA polls this endpoint to fetch pending commands for its account.
+
+    Query: ?account=<account_no>
+    Auth: X-Auth-Token required when AUTH_TOKEN is set.
+    """
+    if not _check_auth():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    acct = str(request.args.get("account") or "").strip()
+    if not acct:
+        return jsonify({"ok": False, "error": "account required"}), 400
+
+    with _cmd_lock:
+        q = _cmd_pending.get(acct)
+        cmds = list(q) if q else []
+
+    resp = jsonify({"ok": True, "account": acct, "count": len(cmds), "commands": cmds})
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/api/command/ack", methods=["POST"])
+def api_command_ack():
+    """EA acknowledges command execution.
+
+    Body: {"id": "<cmd_id>", "status": "done"|"failed", "result": "<text>"}
+    Auth: X-Auth-Token required when AUTH_TOKEN is set.
+    """
+    if not _check_auth():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    raw = request.get_data(as_text=True)
+    if not raw:
+        return jsonify({"ok": False, "error": "empty body"}), 400
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    cmd_id = str(body.get("id") or "").strip()
+    status = str(body.get("status") or "").strip()
+    result = body.get("result", "")
+
+    if not cmd_id:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    if status not in ("done", "failed"):
+        return jsonify({"ok": False, "error": "status must be done|failed"}), 400
+
+    with _cmd_lock:
+        cmd = _cmd_by_id.get(cmd_id)
+        if cmd is None:
+            return jsonify({"ok": False, "error": "unknown command id"}), 404
+
+        cmd["status"] = status
+        cmd["result"] = str(result)
+        cmd["acked_at"] = datetime.now().isoformat(timespec="seconds")
+
+        # Remove from pending queue (linear, but queues are tiny)
+        acct = cmd["account"]
+        pending = _cmd_pending.get(acct)
+        if pending:
+            try:
+                pending.remove(cmd)
+            except ValueError:
+                pass
+
+        # Append to history (capped)
+        hist = _cmd_history.setdefault(acct, deque(maxlen=50))
+        hist.append(cmd)
+
+    return jsonify({"ok": True, "command": cmd}), 200
+
+
+@app.route("/api/command/history")
+def api_command_history():
+    """Return recent command history for an account (for dashboard UI)."""
+    if not _check_auth():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    acct = str(request.args.get("account") or "").strip()
+    if not acct:
+        return jsonify({"ok": False, "error": "account required"}), 400
+
+    with _cmd_lock:
+        pending = list(_cmd_pending.get(acct, ()))
+        history = list(_cmd_history.get(acct, ()))
+
+    resp = jsonify({
+        "ok": True,
+        "account": acct,
+        "pending": pending,
+        "history": history,
+    })
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
