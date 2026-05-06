@@ -550,6 +550,160 @@ header::after {
 .open-count { font-size:24px;font-weight:800;color:var(--cyan3);font-family:'JetBrains Mono',monospace; }
 .open-pnl   { font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700; }
 
+/* Position list (per-trade rows w/ Close button) */
+.pos-toolbar {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:12px; gap:8px; flex-wrap:wrap;
+}
+.pos-list {
+  margin-top:10px; display:flex; flex-direction:column; gap:6px;
+  max-height: 360px; overflow-y:auto;
+}
+.pos-item {
+  display:grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap:10px; align-items:center;
+  background: var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px; padding:10px 12px;
+  font-size:12px;
+  transition: border-color .2s ease, background .2s ease;
+}
+.pos-item:hover { border-color: var(--border2); }
+.pos-item.closing { opacity:.55; pointer-events:none; }
+.pos-side {
+  font-family:'JetBrains Mono',monospace; font-weight:800; font-size:11px;
+  letter-spacing:.5px; padding:3px 8px; border-radius:6px; min-width:42px; text-align:center;
+}
+.pos-side.buy  { background:rgba(0,230,118,0.12); color:var(--green); border:1px solid rgba(0,230,118,0.3); }
+.pos-side.sell { background:rgba(255,61,90,0.12); color:var(--red);   border:1px solid rgba(255,61,90,0.3); }
+.pos-meta { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pos-line1 {
+  display:flex; gap:6px; align-items:baseline;
+  font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.pos-sym  { font-weight:700; color:var(--cyan2); }
+.pos-vol  { color:var(--muted); }
+.pos-tkt  { color:var(--muted); font-size:10px; }
+.pos-line2 { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+.pos-pnl  { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; text-align:right; }
+.pos-pnl.g { color: var(--green); }
+.pos-pnl.r { color: var(--red); }
+
+.btn-close {
+  background: rgba(255,61,90,0.10);
+  color: var(--red);
+  border: 1px solid rgba(255,61,90,0.35);
+  border-radius: 8px;
+  font: 600 11px 'Inter', sans-serif;
+  padding: 6px 12px; cursor: pointer;
+  letter-spacing:.4px;
+  transition: background .2s ease, transform .1s ease;
+}
+.btn-close:hover  { background: rgba(255,61,90,0.22); }
+.btn-close:active { transform: scale(0.96); }
+.btn-close:disabled { opacity:.4; cursor:default; }
+.btn-close-all {
+  background: linear-gradient(135deg, rgba(255,61,90,0.18), rgba(255,61,90,0.10));
+  color: var(--red);
+  border: 1px solid rgba(255,61,90,0.4);
+  border-radius: 8px;
+  font: 700 11px 'Inter', sans-serif;
+  padding: 6px 14px; cursor: pointer;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.btn-close-all:hover { background: linear-gradient(135deg, rgba(255,61,90,0.28), rgba(255,61,90,0.18)); }
+.btn-close-all:disabled { opacity:.35; cursor:default; }
+.pos-empty {
+  text-align:center; padding:18px; color:var(--muted); font-size:12px;
+  background:var(--surface2); border:1px dashed var(--border); border-radius:10px;
+}
+
+/* Confirmation dialog */
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display:none; align-items:center; justify-content:center; z-index: 9000;
+  backdrop-filter: blur(4px);
+}
+.confirm-overlay.show { display:flex; }
+.confirm-card {
+  background: var(--bg2); border:1px solid var(--border2);
+  border-radius:14px; padding:20px 22px; max-width:380px; width:90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.confirm-card h3 { margin:0 0 8px; font-size:15px; color:var(--cyan2); }
+.confirm-card p  { margin:6px 0 16px; font-size:13px; color:var(--text); line-height:1.5; }
+.confirm-card .key { color:var(--cyan); font-family:'JetBrains Mono',monospace; }
+.confirm-card .actions { display:flex; gap:10px; justify-content:flex-end; }
+.confirm-card button {
+  font: 600 12px 'Inter', sans-serif; padding:8px 16px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border);
+}
+.confirm-card .cancel { background:transparent; color:var(--text); }
+.confirm-card .cancel:hover { background:var(--surface2); }
+.confirm-card .confirm {
+  background:var(--red); color:#fff; border-color:var(--red);
+}
+.confirm-card .confirm:hover { background:var(--red2); }
+
+/* Toast notifications */
+.toast-wrap {
+  position: fixed; right: 16px; bottom: 16px; z-index: 9100;
+  display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none;
+}
+.toast {
+  pointer-events:auto;
+  background: var(--bg2); border:1px solid var(--border2);
+  border-radius:10px; padding:10px 14px; min-width:240px;
+  font-size:12px; color:var(--text);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  animation: toastIn .3s ease;
+  display:flex; align-items:center; gap:10px;
+}
+.toast.ok   { border-color: rgba(0,230,118,0.5); }
+.toast.err  { border-color: rgba(255,61,90,0.5); }
+.toast.info { border-color: rgba(0,212,255,0.5); }
+.toast .ico { font-size:14px; }
+.toast.ok .ico   { color: var(--green); }
+.toast.err .ico  { color: var(--red); }
+.toast.info .ico { color: var(--cyan); }
+.toast .msg { flex:1; line-height:1.4; }
+.toast .msg b { color:var(--cyan2); font-family:'JetBrains Mono',monospace; }
+@keyframes toastIn {
+  from { transform: translateX(20px); opacity:0; }
+  to   { transform: translateX(0); opacity:1; }
+}
+
+/* Token modal */
+.token-modal {
+  position:fixed; inset:0; background:rgba(0,0,0,0.7);
+  display:none; align-items:center; justify-content:center; z-index:9200;
+  backdrop-filter: blur(4px);
+}
+.token-modal.show { display:flex; }
+.token-card {
+  background: var(--bg2); border:1px solid var(--border2);
+  border-radius:14px; padding:22px; max-width:420px; width:92%;
+}
+.token-card h3 { margin:0 0 8px; font-size:15px; color:var(--cyan2); }
+.token-card p { margin:4px 0 14px; font-size:12px; color:var(--muted); line-height:1.5; }
+.token-card input[type=password] {
+  width:100%; box-sizing:border-box;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px; color:var(--text);
+  font:500 13px 'JetBrains Mono', monospace;
+  margin-bottom:14px;
+}
+.token-card input:focus { outline:none; border-color:var(--cyan); }
+.token-card .actions { display:flex; gap:10px; justify-content:space-between; align-items:center; }
+.token-card .clear  { background:transparent; border:none; color:var(--muted); font-size:11px; cursor:pointer; text-decoration:underline; }
+.token-card .save   {
+  background:var(--cyan); color:#000; border:none; border-radius:8px;
+  padding:8px 16px; font:700 12px 'Inter',sans-serif; cursor:pointer;
+}
+
 /* ─── FOOTER ─── */
 footer {
   text-align:center; color:var(--muted);
@@ -982,6 +1136,14 @@ body::before {
           <div style="font-size:10px;color:var(--muted);margin-top:3px">floating PnL</div>
         </div>
       </div>
+      <div class="pos-toolbar">
+        <button class="btn-close-all" id="btnCloseAll" type="button" disabled>Close All</button>
+        <button class="clear" id="btnEditToken" type="button"
+                style="background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline">
+          Trade token
+        </button>
+      </div>
+      <div class="pos-list" id="posList"></div>
     </div>
   </div>
 
@@ -1007,6 +1169,34 @@ body::before {
   <span class="x" id="installDismiss" title="Dismiss">×</span>
 </button>
 
+<!-- ── CLOSE-POSITION CONFIRM DIALOG ── -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-card">
+    <h3 id="confirmTitle">Close Position?</h3>
+    <p id="confirmBody">This will close the position immediately at market price.</p>
+    <div class="actions">
+      <button type="button" class="cancel" id="confirmCancel">Cancel</button>
+      <button type="button" class="confirm" id="confirmOk">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST NOTIFICATIONS ── -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ── TRADE TOKEN MODAL ── -->
+<div class="token-modal" id="tokenModal">
+  <div class="token-card">
+    <h3>Trade Token</h3>
+    <p>Required when the server enforces auth. Must match the EA's <span style="color:var(--cyan)">InpAuthToken</span> and the server's <span style="color:var(--cyan)">AUTH_TOKEN</span>. Leave empty for local dev.</p>
+    <input type="password" id="tokenInput" placeholder="Paste token (or leave empty)" autocomplete="off">
+    <div class="actions">
+      <button type="button" class="clear" id="tokenClear">Clear saved token</button>
+      <button type="button" class="save"  id="tokenSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="ios-install-modal" id="iosInstallModal">
   <div class="ios-install-card">
     <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:inline-block;vertical-align:-3px;margin-right:6px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/><path d="M9 7h6"/></svg>Install on iPhone</h3>
@@ -1027,9 +1217,11 @@ body::before {
 const SSE_URL      = "/api/stream";
 const API_URL      = "/api/performance";
 const ACCOUNTS_URL = "/api/accounts";
+const CMD_URL      = "/api/command";
 const POLL_MS      = 8000;
 const LS_KEY_ACCT  = "tc_active_account";
 const LS_KEY_INST  = "tc_install_dismissed_at";
+const LS_KEY_TOKEN = "tc_trade_token";
 
 /* ══════════════════════════════════════════════════════
    PWA INSTALL PROMPT
@@ -1303,6 +1495,11 @@ function connectSSE() {
   es.onmessage = e => {
     try {
       const d = JSON.parse(e.data);
+      // Command-result events arrive on the same SSE stream as snapshots
+      if(d._event === "command_result") {
+        handleCommandResult(d.result || {});
+        return;
+      }
       const pushNo = String(d.account_number || d.meta?.account_number || "");
       if(!activeAccount || activeAccount === pushNo) render(d);
       refreshAccountTabs();
@@ -1616,6 +1813,9 @@ function render(d) {
   setText("op-count", opos);
   setText("op-pnl",   fmt$(opnl));
   document.getElementById("op-pnl").className = "open-pnl " + (opnl >= 0 ? "g":"r");
+
+  // Per-trade list with Close buttons
+  renderPositionsList(d.positions || [], acctNo);
 }
 
 function showError(msg) {
@@ -1687,6 +1887,209 @@ if(saved) {
 } else {
   applyTheme(sysDark.matches ? "dark" : "light");
 }
+
+/* ══════════════════════════════════════════════════════
+   POSITION LIST + REMOTE CLOSE
+══════════════════════════════════════════════════════ */
+const _pendingCmds = new Set();   // command ids we're waiting on
+const _closingTickets = new Set(); // tickets we just sent close for (visual lock)
+
+function renderPositionsList(positions, acctNo) {
+  const list = document.getElementById("posList");
+  const closeAllBtn = document.getElementById("btnCloseAll");
+  if(!list) return;
+
+  list.innerHTML = "";
+
+  if(!positions || positions.length === 0) {
+    list.innerHTML = `<div class="pos-empty">No open positions</div>`;
+    closeAllBtn.disabled = true;
+    closeAllBtn.onclick  = null;
+    return;
+  }
+
+  closeAllBtn.disabled = false;
+  closeAllBtn.onclick = () => {
+    askConfirm({
+      title: "Close All Positions?",
+      body:  `This will close <b>${positions.length}</b> open position(s) on account <span class="key">#${acctNo}</span> at market price.`,
+      confirmText: "Close All",
+      onConfirm: () => sendCommand({ account: acctNo, action: "close_all" })
+    });
+  };
+
+  positions.forEach(p => {
+    const isBuy   = p.type === 0 || p.type_str === "BUY";
+    const profit  = Number(p.profit || 0) + Number(p.swap || 0);
+    const pCls    = profit >= 0 ? "g" : "r";
+    const pricesLine =
+      `${Number(p.price_open).toFixed(2)} → ${Number(p.price_current).toFixed(2)}`
+      + (p.sl > 0 ? ` · SL ${Number(p.sl).toFixed(2)}` : "")
+      + (p.tp > 0 ? ` · TP ${Number(p.tp).toFixed(2)}` : "");
+
+    const row = document.createElement("div");
+    row.className = "pos-item" + (_closingTickets.has(p.ticket) ? " closing" : "");
+    row.dataset.ticket = String(p.ticket);
+    row.innerHTML = `
+      <div class="pos-side ${isBuy ? "buy" : "sell"}">${isBuy ? "BUY" : "SELL"}</div>
+      <div class="pos-meta">
+        <div class="pos-line1">
+          <span class="pos-sym">${escapeHtml(p.symbol || "")}</span>
+          <span class="pos-vol">${Number(p.volume).toFixed(2)} lot</span>
+          <span class="pos-tkt">#${p.ticket}</span>
+        </div>
+        <div class="pos-line2">${escapeHtml(pricesLine)}</div>
+      </div>
+      <div class="pos-pnl ${pCls}">${fmt$(profit)}</div>
+      <button class="btn-close" type="button">Close</button>
+    `;
+    row.querySelector(".btn-close").onclick = () => {
+      askConfirm({
+        title: "Close Position?",
+        body:  `Close <span class="key">${isBuy ? "BUY" : "SELL"} ${Number(p.volume).toFixed(2)} ${escapeHtml(p.symbol||"")}</span> · ticket <span class="key">#${p.ticket}</span> at market price?`,
+        confirmText: "Close",
+        onConfirm: () => sendCommand({ account: acctNo, action: "close", ticket: p.ticket })
+      });
+    };
+    list.appendChild(row);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]
+  ));
+}
+
+async function sendCommand(payload) {
+  const acctNo = payload.account;
+  if(payload.action === "close" && payload.ticket) {
+    _closingTickets.add(payload.ticket);
+    const row = document.querySelector(`.pos-item[data-ticket="${payload.ticket}"]`);
+    if(row) row.classList.add("closing");
+  }
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    const tok = localStorage.getItem(LS_KEY_TOKEN) || "";
+    if(tok) headers["X-Auth-Token"] = tok;
+
+    const res = await fetch(CMD_URL, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if(res.status === 401) {
+      releaseClosing(payload.ticket);
+      showToast("err", "Server requires a trade token. Click <b>Trade token</b> below.");
+      openTokenModal();
+      return;
+    }
+    if(!res.ok || !data.ok) {
+      releaseClosing(payload.ticket);
+      showToast("err", "Queue failed: " + (data.error || res.status));
+      return;
+    }
+
+    _pendingCmds.add(data.id);
+    const label = payload.action === "close_all"
+      ? "Close-all queued — waiting for EA…"
+      : `Close <b>#${payload.ticket}</b> queued — waiting for EA…`;
+    showToast("info", label);
+
+    // Safety net: if EA never reports back within 25 s, unlock the row
+    setTimeout(() => {
+      if(_pendingCmds.delete(data.id)) {
+        releaseClosing(payload.ticket);
+        showToast("err", "No response from EA. Is the EA still running?");
+      }
+    }, 25000);
+  } catch(e) {
+    releaseClosing(payload.ticket);
+    showToast("err", "Network error: " + e.message);
+  }
+}
+
+function releaseClosing(ticket) {
+  if(!ticket) return;
+  _closingTickets.delete(ticket);
+  const row = document.querySelector(`.pos-item[data-ticket="${ticket}"]`);
+  if(row) row.classList.remove("closing");
+}
+
+function handleCommandResult(r) {
+  _pendingCmds.delete(r.id);
+  releaseClosing(r.ticket);
+  const tag = r.action === "close_all"
+    ? "Close-all"
+    : `Close <b>#${r.ticket}</b>`;
+  if(r.ok) {
+    showToast("ok",  `${tag} ✓ ${escapeHtml(r.message || "")}`);
+  } else {
+    showToast("err", `${tag} ✗ ${escapeHtml(r.message || "failed")}`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   CONFIRM DIALOG + TOAST
+══════════════════════════════════════════════════════ */
+function askConfirm({ title, body, confirmText, onConfirm }) {
+  const overlay = document.getElementById("confirmOverlay");
+  document.getElementById("confirmTitle").textContent = title;
+  document.getElementById("confirmBody").innerHTML    = body;
+  const okBtn = document.getElementById("confirmOk");
+  okBtn.textContent = confirmText || "OK";
+  overlay.classList.add("show");
+
+  const cancel = () => overlay.classList.remove("show");
+  document.getElementById("confirmCancel").onclick = cancel;
+  okBtn.onclick = () => { cancel(); onConfirm && onConfirm(); };
+  overlay.onclick = e => { if(e.target === overlay) cancel(); };
+}
+
+function showToast(kind, html, ttl) {
+  const wrap = document.getElementById("toastWrap");
+  if(!wrap) return;
+  const t = document.createElement("div");
+  t.className = "toast " + kind;
+  const icon = kind === "ok" ? "✓" : kind === "err" ? "✗" : "•";
+  t.innerHTML = `<span class="ico">${icon}</span><span class="msg">${html}</span>`;
+  wrap.appendChild(t);
+  setTimeout(() => {
+    t.style.transition = "opacity .3s ease";
+    t.style.opacity = "0";
+    setTimeout(() => t.remove(), 350);
+  }, ttl || 5000);
+}
+
+/* ══════════════════════════════════════════════════════
+   TRADE TOKEN MODAL
+══════════════════════════════════════════════════════ */
+function openTokenModal() {
+  const modal = document.getElementById("tokenModal");
+  const input = document.getElementById("tokenInput");
+  input.value = localStorage.getItem(LS_KEY_TOKEN) || "";
+  modal.classList.add("show");
+  setTimeout(() => input.focus(), 50);
+}
+document.getElementById("btnEditToken").onclick = openTokenModal;
+document.getElementById("tokenSave").onclick = () => {
+  const v = document.getElementById("tokenInput").value.trim();
+  if(v) localStorage.setItem(LS_KEY_TOKEN, v);
+  else  localStorage.removeItem(LS_KEY_TOKEN);
+  document.getElementById("tokenModal").classList.remove("show");
+  showToast("info", v ? "Trade token saved." : "Trade token cleared.");
+};
+document.getElementById("tokenClear").onclick = () => {
+  localStorage.removeItem(LS_KEY_TOKEN);
+  document.getElementById("tokenInput").value = "";
+  showToast("info", "Trade token cleared.");
+};
+document.getElementById("tokenModal").addEventListener("click", e => {
+  if(e.target.id === "tokenModal") e.currentTarget.classList.remove("show");
+});
 
 /* ══════════════════════════════════════════════════════
    BOOT

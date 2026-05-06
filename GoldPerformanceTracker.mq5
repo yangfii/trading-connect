@@ -1,32 +1,39 @@
 //+------------------------------------------------------------------+
 //|                                    GoldPerformanceTracker.mq5   |
 //|                              Yang Fi - Gold Performance EA       |
-//|                Version 2.0 - Real-time HTTP Push to Web App      |
+//|       Version 2.1 - Push + Remote Position Close from Web App   |
 //+------------------------------------------------------------------+
 //
 //  HOW THIS WORKS:
 //  ───────────────
 //  1. EA collects real MT5 account + trade data every N seconds
-//  2. Pushes JSON directly to your web server via HTTP POST
-//  3. Web dashboard receives data instantly (no file delays)
+//  2. Pushes JSON (incl. open positions) to your web server via HTTP POST
+//  3. EA polls server for queued commands (close / close_all) and executes
+//  4. EA reports each command's outcome back to the server
+//  5. Web dashboard sees live updates via SSE
 //
 //  SETUP REQUIRED IN MT5:
 //  ─────────────────────
 //  Go to: Tools > Options > Expert Advisors
 //  ✅ Check "Allow WebRequest for listed URL"
-//  ➕ Add: http://127.0.0.1:5000
+//  ➕ Add: http://127.0.0.1:5000   (for local dev)
+//  ➕ Add: https://trader-performance.astracambodia.com   (for production)
 //  Click OK, then restart the EA
 //
 //+------------------------------------------------------------------+
 #property copyright "Yang Fi - Gold Trader"
-#property version   "2.00"
-#property description "Push real MT5 data to Web Dashboard via HTTP"
+#property version   "2.10"
+#property description "Push real MT5 data to Web Dashboard via HTTP + remote close"
+
+#include <Trade\Trade.mqh>
+CTrade g_trade;
 
 //+------------------------------------------------------------------+
 //| Inputs                                                           |
 //+------------------------------------------------------------------+
 input group "=== Server Connection ==="
-input string   InpServerURL    = "http://127.0.0.1:5000/api/push"; // Web Server URL
+input string   InpServerURL    = "http://127.0.0.1:5000/api/push"; // Web Server URL (push endpoint)
+input string   InpServerBase   = "http://127.0.0.1:5000";          // Web Server base URL (for commands)
 input string   InpAuthToken    = "";            // Auth token (must match server AUTH_TOKEN)
 input string   InpAccountGroup = "";            // Group label: Prop / Personal / Demo / Live (optional)
 input int      InpTimeout      = 3000;          // HTTP timeout (ms)
@@ -35,6 +42,10 @@ input group "=== Update Settings ==="
 input int      InpUpdateSecs   = 5;             // Push interval (seconds)
 input bool     InpFileBackup   = true;          // Also write JSON file (backup)
 input string   InpJSONFile     = "gold_performance.json"; // Backup JSON filename
+
+input group "=== Remote Trading ==="
+input bool     InpAllowRemoteClose = true;      // Allow web dashboard to close positions
+input int      InpCloseSlippage    = 20;        // Slippage in points for close orders
 
 input group "=== Trade Filter ==="
 input string   InpSymbol       = "";            // Symbol (empty = auto-detect from chart)
@@ -52,6 +63,25 @@ struct SPerf {
    double avgWin, avgLoss, bestTrade, worstTrade, profitFactor;
    double maxDrawdown, maxDrawdownPct, dailyDDPct, avgRR;
 };
+
+//+------------------------------------------------------------------+
+//| Open position snapshot (for JSON)                                |
+//+------------------------------------------------------------------+
+struct SPos {
+   ulong    ticket;
+   string   symbol;
+   int      type;          // 0=BUY, 1=SELL
+   double   volume;
+   double   priceOpen;
+   double   priceCurrent;
+   double   sl, tp;
+   double   profit;
+   double   swap;
+   datetime timeOpen;
+   long     magic;
+   string   comment;
+};
+SPos g_positions[];
 
 //+------------------------------------------------------------------+
 //| Globals                                                          |
@@ -76,7 +106,7 @@ int OnInit() {
    string atype    = (AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO) ? "DEMO" : "LIVE";
 
    Print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-   Print("  Gold Performance Tracker v2.0  |  Yang Fi");
+   Print("  Gold Performance Tracker v2.1  |  Yang Fi");
    Print("  ─────────────────────────────────────────");
    Print("  Account : #", login, " (", atype, ")");
    Print("  Name    : ", name);
@@ -114,6 +144,11 @@ void OnTimer() {
 //| Main: calculate → build JSON → push                             |
 //+------------------------------------------------------------------+
 void DoPush() {
+   // Pull pending commands from server BEFORE building snapshot,
+   // so the snapshot we push afterwards reflects post-execution state.
+   if(InpAllowRemoteClose)
+      FetchAndExecuteCommands();
+
    SPerf d;
    Calculate(d);
    string json = BuildJSON(d);
@@ -154,6 +189,7 @@ void Calculate(SPerf &d) {
    d.equity  = AccountInfoDouble(ACCOUNT_EQUITY);
 
    // ── Live open positions ──
+   ArrayResize(g_positions, 0);
    for(int i = PositionsTotal() - 1; i >= 0; i--) {
       ulong tkt = PositionGetTicket(i);
       if(!tkt) continue;
@@ -162,6 +198,22 @@ void Calculate(SPerf &d) {
       d.openPositions++;
       d.openPnL += PositionGetDouble(POSITION_PROFIT)
                  + PositionGetDouble(POSITION_SWAP);
+
+      int idx = ArraySize(g_positions);
+      ArrayResize(g_positions, idx + 1);
+      g_positions[idx].ticket       = tkt;
+      g_positions[idx].symbol       = PositionGetString (POSITION_SYMBOL);
+      g_positions[idx].type         = (int)PositionGetInteger(POSITION_TYPE);
+      g_positions[idx].volume       = PositionGetDouble (POSITION_VOLUME);
+      g_positions[idx].priceOpen    = PositionGetDouble (POSITION_PRICE_OPEN);
+      g_positions[idx].priceCurrent = PositionGetDouble (POSITION_PRICE_CURRENT);
+      g_positions[idx].sl           = PositionGetDouble (POSITION_SL);
+      g_positions[idx].tp           = PositionGetDouble (POSITION_TP);
+      g_positions[idx].profit       = PositionGetDouble (POSITION_PROFIT);
+      g_positions[idx].swap         = PositionGetDouble (POSITION_SWAP);
+      g_positions[idx].timeOpen     = (datetime)PositionGetInteger(POSITION_TIME);
+      g_positions[idx].magic        = PositionGetInteger(POSITION_MAGIC);
+      g_positions[idx].comment      = PositionGetString (POSITION_COMMENT);
    }
 
    // ── Closed trade history ──
@@ -284,9 +336,45 @@ string BuildJSON(const SPerf &d) {
    j += "    \"max_drawdown_pct\": " + DoubleToString(d.maxDrawdownPct, 2) + ",\n";
    j += "    \"daily_dd_pct\": "     + DoubleToString(d.dailyDDPct,    2) + ",\n";
    j += "    \"avg_rr\": "           + DoubleToString(d.avgRR,         2) + "\n";
-   j += "  }\n";
+   j += "  },\n";
+   j += "  \"positions\": [";
+   int np = ArraySize(g_positions);
+   for(int i = 0; i < np; i++) {
+      if(i > 0) j += ",";
+      j += "\n    {";
+      j += "\"ticket\":"        + IntegerToString((long)g_positions[i].ticket);
+      j += ",\"symbol\":\""     + JSONEscape(g_positions[i].symbol) + "\"";
+      j += ",\"type\":"         + IntegerToString(g_positions[i].type);
+      j += ",\"type_str\":\""   + (g_positions[i].type == 0 ? "BUY" : "SELL") + "\"";
+      j += ",\"volume\":"       + DoubleToString(g_positions[i].volume,       2);
+      j += ",\"price_open\":"   + DoubleToString(g_positions[i].priceOpen,    5);
+      j += ",\"price_current\":"+ DoubleToString(g_positions[i].priceCurrent, 5);
+      j += ",\"sl\":"           + DoubleToString(g_positions[i].sl,           5);
+      j += ",\"tp\":"           + DoubleToString(g_positions[i].tp,           5);
+      j += ",\"profit\":"       + DoubleToString(g_positions[i].profit,       2);
+      j += ",\"swap\":"         + DoubleToString(g_positions[i].swap,         2);
+      j += ",\"time_open\":\""  + TimeToString(g_positions[i].timeOpen, TIME_DATE|TIME_MINUTES) + "\"";
+      j += ",\"magic\":"        + IntegerToString(g_positions[i].magic);
+      j += ",\"comment\":\""    + JSONEscape(g_positions[i].comment) + "\"";
+      j += "}";
+   }
+   if(np > 0) j += "\n  ";
+   j += "]\n";
    j += "}";
    return j;
+}
+
+//+------------------------------------------------------------------+
+//| Minimal JSON string escape                                       |
+//+------------------------------------------------------------------+
+string JSONEscape(const string s) {
+   string r = s;
+   StringReplace(r, "\\", "\\\\");
+   StringReplace(r, "\"", "\\\"");
+   StringReplace(r, "\n", " ");
+   StringReplace(r, "\r", " ");
+   StringReplace(r, "\t", " ");
+   return r;
 }
 
 //+------------------------------------------------------------------+
@@ -325,5 +413,216 @@ void WriteFile(const string &json) {
    if(fh == INVALID_HANDLE) return;
    FileWriteString(fh, json);
    FileClose(fh);
+}
+
+//+------------------------------------------------------------------+
+//| Build commands base URL                                          |
+//+------------------------------------------------------------------+
+string CommandsURL() {
+   long acct = AccountInfoInteger(ACCOUNT_LOGIN);
+   string base = InpServerBase;
+   // Trim trailing slash
+   if(StringLen(base) > 0 && StringSubstr(base, StringLen(base)-1, 1) == "/")
+      base = StringSubstr(base, 0, StringLen(base)-1);
+   return base + "/api/commands?account=" + IntegerToString(acct);
+}
+
+string ResultURL() {
+   string base = InpServerBase;
+   if(StringLen(base) > 0 && StringSubstr(base, StringLen(base)-1, 1) == "/")
+      base = StringSubstr(base, 0, StringLen(base)-1);
+   return base + "/api/command_result";
+}
+
+//+------------------------------------------------------------------+
+//| Fetch pending commands and execute                               |
+//+------------------------------------------------------------------+
+void FetchAndExecuteCommands() {
+   string url = CommandsURL();
+   string headers = "X-Source: MT5-EA\r\n";
+   if(InpAuthToken != "")
+      headers += "X-Auth-Token: " + InpAuthToken + "\r\n";
+
+   char   body[];
+   char   resp[];
+   string respHdr;
+
+   ResetLastError();
+   int code = WebRequest("GET", url, headers, InpTimeout, body, resp, respHdr);
+   if(code != 200) {
+      if(GetLastError() == 5203)
+         Print("🔒 WebRequest blocked for commands URL. Add base URL to allowed URLs.");
+      return;
+   }
+
+   string json = CharArrayToString(resp, 0, WHOLE_ARRAY, CP_UTF8);
+   // Expect: {"commands":[{"id":"...","action":"close","ticket":12345}, ...]}
+   ProcessCommandsJSON(json);
+}
+
+//+------------------------------------------------------------------+
+//| Naive JSON walker — extracts each command object and dispatches  |
+//+------------------------------------------------------------------+
+void ProcessCommandsJSON(const string json) {
+   int p = StringFind(json, "\"commands\"");
+   if(p < 0) return;
+   int arrStart = StringFind(json, "[", p);
+   int arrEnd   = StringFind(json, "]", arrStart);
+   if(arrStart < 0 || arrEnd < 0) return;
+
+   int depth = 0;
+   int objStart = -1;
+   for(int i = arrStart + 1; i < arrEnd; i++) {
+      string c = StringSubstr(json, i, 1);
+      if(c == "{") {
+         if(depth == 0) objStart = i;
+         depth++;
+      } else if(c == "}") {
+         depth--;
+         if(depth == 0 && objStart >= 0) {
+            string obj = StringSubstr(json, objStart, i - objStart + 1);
+            HandleCommand(obj);
+            objStart = -1;
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Extract a string field from a flat JSON object                  |
+//+------------------------------------------------------------------+
+string JSONField(const string obj, const string key) {
+   string needle = "\"" + key + "\"";
+   int p = StringFind(obj, needle);
+   if(p < 0) return "";
+   int colon = StringFind(obj, ":", p);
+   if(colon < 0) return "";
+   int i = colon + 1;
+   // skip whitespace
+   while(i < StringLen(obj)) {
+      string c = StringSubstr(obj, i, 1);
+      if(c != " " && c != "\t" && c != "\n" && c != "\r") break;
+      i++;
+   }
+   if(i >= StringLen(obj)) return "";
+   string first = StringSubstr(obj, i, 1);
+   if(first == "\"") {
+      // quoted string
+      int end = StringFind(obj, "\"", i + 1);
+      if(end < 0) return "";
+      return StringSubstr(obj, i + 1, end - i - 1);
+   }
+   // numeric / literal — read until comma, brace, or whitespace
+   int end = i;
+   while(end < StringLen(obj)) {
+      string c = StringSubstr(obj, end, 1);
+      if(c == "," || c == "}" || c == " " || c == "\n" || c == "\r" || c == "\t") break;
+      end++;
+   }
+   return StringSubstr(obj, i, end - i);
+}
+
+//+------------------------------------------------------------------+
+//| Dispatch one command                                             |
+//+------------------------------------------------------------------+
+void HandleCommand(const string obj) {
+   string id     = JSONField(obj, "id");
+   string action = JSONField(obj, "action");
+   string ticketStr = JSONField(obj, "ticket");
+   ulong  ticket = (ulong)StringToInteger(ticketStr);
+
+   bool   ok      = false;
+   string message = "";
+
+   if(action == "close") {
+      ok = ClosePositionByTicket(ticket, message);
+   }
+   else if(action == "close_all") {
+      ok = CloseAllPositions(message);
+   }
+   else {
+      message = "unknown action: " + action;
+   }
+
+   ReportResult(id, action, ticket, ok, message);
+}
+
+//+------------------------------------------------------------------+
+//| Close a single position by ticket                                |
+//+------------------------------------------------------------------+
+bool ClosePositionByTicket(const ulong ticket, string &message) {
+   if(!PositionSelectByTicket(ticket)) {
+      message = "position not found (already closed?)";
+      return false;
+   }
+
+   g_trade.SetDeviationInPoints((ulong)InpCloseSlippage);
+   g_trade.SetTypeFillingBySymbol(PositionGetString(POSITION_SYMBOL));
+
+   bool ok = g_trade.PositionClose(ticket, (ulong)InpCloseSlippage);
+   if(ok) {
+      message = "closed (retcode=" + IntegerToString(g_trade.ResultRetcode())
+              + ", deal=" + IntegerToString((long)g_trade.ResultDeal()) + ")";
+      Print("✅ Remote close succeeded: ticket=", ticket, " ", message);
+   } else {
+      message = "close failed retcode=" + IntegerToString(g_trade.ResultRetcode())
+              + " " + g_trade.ResultRetcodeDescription();
+      Print("❌ Remote close FAILED: ticket=", ticket, " ", message);
+   }
+   return ok;
+}
+
+//+------------------------------------------------------------------+
+//| Close all positions (filtered by symbol/magic if configured)     |
+//+------------------------------------------------------------------+
+bool CloseAllPositions(string &message) {
+   string sym = (InpSymbol == "") ? "" : InpSymbol;
+   int closed = 0, failed = 0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong tkt = PositionGetTicket(i);
+      if(!tkt) continue;
+      if(sym != "" && PositionGetString(POSITION_SYMBOL) != sym) continue;
+      if(InpMagic != 0 && PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
+
+      string msg;
+      if(ClosePositionByTicket(tkt, msg)) closed++;
+      else failed++;
+   }
+   message = "closed=" + IntegerToString(closed) + " failed=" + IntegerToString(failed);
+   return failed == 0;
+}
+
+//+------------------------------------------------------------------+
+//| Report command result back to server                             |
+//+------------------------------------------------------------------+
+void ReportResult(const string id, const string action,
+                  const ulong ticket, const bool ok, const string message) {
+   long acct = AccountInfoInteger(ACCOUNT_LOGIN);
+
+   string j = "{";
+   j += "\"id\":\""        + id      + "\"";
+   j += ",\"account\":"    + IntegerToString(acct);
+   j += ",\"action\":\""   + action  + "\"";
+   j += ",\"ticket\":"     + IntegerToString((long)ticket);
+   j += ",\"ok\":"         + (ok ? "true" : "false");
+   j += ",\"message\":\""  + JSONEscape(message) + "\"";
+   j += ",\"reported_at\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\"";
+   j += "}";
+
+   string headers = "Content-Type: application/json\r\nX-Source: MT5-EA\r\n";
+   if(InpAuthToken != "")
+      headers += "X-Auth-Token: " + InpAuthToken + "\r\n";
+
+   char   body[];
+   char   resp[];
+   string respHdr;
+   int len = StringToCharArray(j, body, 0, WHOLE_ARRAY, CP_UTF8) - 1;
+   if(len <= 0) return;
+   ArrayResize(body, len);
+
+   ResetLastError();
+   WebRequest("POST", ResultURL(), headers, InpTimeout, body, resp, respHdr);
+   // Best-effort — failures here are non-fatal.
 }
 //+------------------------------------------------------------------+

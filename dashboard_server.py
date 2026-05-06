@@ -24,9 +24,11 @@ import os
 import json
 import time
 import glob
+import uuid
 import threading
 from pathlib import Path
 from datetime import datetime
+from collections import deque
 from flask import Flask, jsonify, send_file, Response, request, abort
 
 app   = Flask(__name__)
@@ -41,6 +43,14 @@ _accounts      = {}       # {account_number: {...snapshot...}}
 _account_seen  = {}       # {account_number: datetime of last push}
 _push_count    = 0
 _last_push     = None     # datetime of last push
+
+# ─── Command queue (web → EA) ────────────────────────────────────────────────
+# {account_number: deque([{id, action, ticket, queued_at}, ...])}
+_commands      = {}
+# {command_id: {id, account, action, ticket, ok, message, queued_at, reported_at, status}}
+_cmd_results   = {}
+# Bound result history per account so memory doesn't grow forever
+_RESULT_LIMIT  = 50
 
 # ─── Fallback: scan MT5 file folders ─────────────────────────────────────────
 JSON_FILE = "gold_performance.json"
@@ -285,6 +295,168 @@ def api_stream():
             "Access-Control-Allow-Origin": "*",
         },
     )
+
+
+def _check_auth():
+    """Auth check shared by command endpoints. Returns None on OK, or error response."""
+    if AUTH_TOKEN and request.headers.get("X-Auth-Token", "") != AUTH_TOKEN:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    return None
+
+
+@app.route("/api/command", methods=["POST"])
+def api_command():
+    """Web dashboard queues a trade command for the EA.
+
+    Body: {"account": 12345, "action": "close" | "close_all", "ticket": 67890}
+    `ticket` required for "close", ignored for "close_all".
+    """
+    err = _check_auth()
+    if err: return err
+
+    try:
+        body = request.get_json(force=True, silent=False) or {}
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"bad json: {e}"}), 400
+
+    acct   = str(body.get("account") or "").strip()
+    action = str(body.get("action") or "").strip().lower()
+    ticket = body.get("ticket")
+
+    if not acct:
+        return jsonify({"ok": False, "error": "missing 'account'"}), 400
+    if action not in ("close", "close_all"):
+        return jsonify({"ok": False, "error": f"unsupported action: {action}"}), 400
+    if action == "close":
+        if ticket is None:
+            return jsonify({"ok": False, "error": "missing 'ticket'"}), 400
+        try:
+            ticket = int(ticket)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "ticket must be integer"}), 400
+
+    cmd_id = uuid.uuid4().hex[:12]
+    now    = datetime.now()
+    cmd = {
+        "id":        cmd_id,
+        "action":    action,
+        "ticket":    ticket if action == "close" else 0,
+        "queued_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    with _lock:
+        if acct not in _commands:
+            _commands[acct] = deque()
+        _commands[acct].append(cmd)
+        _cmd_results[cmd_id] = {
+            **cmd,
+            "account":  acct,
+            "status":   "queued",
+            "ok":       None,
+            "message":  "",
+        }
+
+    return jsonify({"ok": True, "id": cmd_id, "queued_at": cmd["queued_at"]}), 200
+
+
+@app.route("/api/commands")
+def api_commands_list():
+    """EA polls this endpoint to receive (and drain) pending commands.
+
+    Query: ?account=12345
+    Returns: {"commands": [{"id": "...", "action": "close", "ticket": 123}, ...]}
+    Commands are removed from the queue once returned.
+    """
+    err = _check_auth()
+    if err: return err
+
+    acct = str(request.args.get("account") or "").strip()
+    if not acct:
+        return jsonify({"commands": []}), 200
+
+    drained = []
+    with _lock:
+        q = _commands.get(acct)
+        if q:
+            while q:
+                cmd = q.popleft()
+                drained.append(cmd)
+                if cmd["id"] in _cmd_results:
+                    _cmd_results[cmd["id"]]["status"] = "sent"
+
+    return jsonify({"commands": drained}), 200
+
+
+@app.route("/api/command_result", methods=["POST"])
+def api_command_result():
+    """EA reports the outcome of an executed command."""
+    err = _check_auth()
+    if err: return err
+
+    try:
+        body = request.get_json(force=True, silent=False) or {}
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"bad json: {e}"}), 400
+
+    cmd_id  = str(body.get("id") or "").strip()
+    if not cmd_id:
+        return jsonify({"ok": False, "error": "missing 'id'"}), 400
+
+    now = datetime.now()
+    with _lock:
+        rec = _cmd_results.get(cmd_id)
+        if rec is None:
+            # Unknown id — still record it so the dashboard can see something
+            rec = {
+                "id":      cmd_id,
+                "account": str(body.get("account") or ""),
+                "action":  str(body.get("action") or ""),
+                "ticket":  body.get("ticket") or 0,
+                "queued_at": "",
+            }
+            _cmd_results[cmd_id] = rec
+        rec["ok"]          = bool(body.get("ok"))
+        rec["message"]     = str(body.get("message") or "")
+        rec["status"]      = "ok" if rec["ok"] else "failed"
+        rec["reported_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Trim result history per account to keep memory bounded
+        acct = rec.get("account", "")
+        if acct:
+            ids = [k for k, v in _cmd_results.items() if v.get("account") == acct]
+            ids.sort(key=lambda k: _cmd_results[k].get("reported_at") or _cmd_results[k].get("queued_at") or "")
+            while len(ids) > _RESULT_LIMIT:
+                _cmd_results.pop(ids.pop(0), None)
+
+    # Push to SSE clients so dashboard sees toast immediately
+    _broadcast({"_event": "command_result", "result": dict(rec)})
+
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/api/command_status")
+def api_command_status():
+    """Web dashboard polls this for outcome of a queued command.
+
+    Query: ?id=<cmd_id>   → single result
+           ?account=12345 → recent results for that account
+    """
+    cmd_id = request.args.get("id")
+    acct   = request.args.get("account")
+
+    with _lock:
+        if cmd_id:
+            rec = _cmd_results.get(cmd_id)
+            if rec is None:
+                return jsonify({"error": "unknown id"}), 404
+            return jsonify(dict(rec)), 200
+
+        if acct:
+            recs = [dict(v) for v in _cmd_results.values() if v.get("account") == str(acct)]
+            recs.sort(key=lambda r: r.get("queued_at") or "", reverse=True)
+            return jsonify({"results": recs[:_RESULT_LIMIT]}), 200
+
+        return jsonify({"error": "specify id= or account="}), 400
 
 
 @app.route("/api/status")
