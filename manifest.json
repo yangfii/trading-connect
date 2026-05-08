@@ -1,13 +1,18 @@
 {
+  "id": "/?source=pwa",
   "name": "Gold Performance Tracker",
   "short_name": "GP Tracker",
-  "description": "Real-time MT5 trading performance dashboard",
-  "start_url": "/",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#001628",
-  "theme_color": "#00d4ff",
+  "description": "Real-time MT5 trading performance dashboard for XAUUSD — equity, drawdown, win rate, and open positions at a glance.",
+  "start_url": "/?source=pwa",
   "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#060912",
+  "theme_color": "#00d4ff",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["finance", "productivity", "business"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -26,6 +31,20 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Positions",
+      "short_name": "Positions",
+      "description": "Jump to live open positions",
+      "url": "/?source=pwa#sec-stats"
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Analytics",
+      "description": "View win/loss breakdown and PnL chart",
+      "url": "/?source=pwa#sec-analytics"
     }
   ]
 }
