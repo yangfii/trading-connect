@@ -106,7 +106,7 @@ int OnInit() {
    string atype    = (AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO) ? "DEMO" : "LIVE";
 
    Print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-   Print("  Gold Performance Tracker v2.1  |  Yang Fi");
+   Print("  Trading Performance Tracker v2.1  |  Yang Fi");
    Print("  ─────────────────────────────────────────");
    Print("  Account : #", login, " (", atype, ")");
    Print("  Name    : ", name);
