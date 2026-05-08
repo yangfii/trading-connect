@@ -869,9 +869,9 @@ body::before {
 }
 .mobile-nav-inner {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 2px;
-  max-width: 480px; margin: 0 auto;
+  max-width: 520px; margin: 0 auto;
 }
 .mob-nav-item {
   display: flex; flex-direction: column; align-items: center;
@@ -1041,6 +1041,7 @@ body::before {
 <div class="err-banner" id="errBanner">⚠ &nbsp;<span id="errMsg"></span></div>
 
 <!-- ── ACCOUNT SWITCHER ── -->
+<div class="section-label" id="sec-accounts" style="display:none">Accounts</div>
 <div class="acct-switcher" id="acctSwitcher" style="display:none;flex-direction:column;align-items:flex-start;gap:8px">
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%">
     <span class="acct-switcher-label">Accounts <span id="acctCount" style="color:var(--cyan);font-weight:700"></span></span>
@@ -1295,6 +1296,10 @@ body::before {
 <!-- ── MOBILE BOTTOM NAV ── -->
 <nav class="mobile-nav" id="mobileNav" aria-label="Sections">
   <div class="mobile-nav-inner">
+    <a class="mob-nav-item" href="#sec-accounts" data-target="sec-accounts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Accounts</span>
+    </a>
     <a class="mob-nav-item" href="#sec-overview" data-target="sec-overview">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       <span>Overview</span>
@@ -1770,7 +1775,7 @@ function renderAccountTabs() {
       <span class="tab-bal ${a.equity >= a.balance ? 'g':'r'}" id="tab-bal-${a.account_number}">${fmt$(a.balance)}</span>
       <span class="tab-seen ${seen.cls}">${a.stale ? "⚠ " : "● "}${seen.txt}</span>
     `;
-    tab.onclick = () => switchAccount(a.account_number);
+    tab.onclick = () => switchAccount(a.account_number, { scrollToOverview: true });
     tabs.appendChild(tab);
   });
 }
@@ -1784,9 +1789,15 @@ async function refreshAccountTabs() {
     const switcher = document.getElementById("acctSwitcher");
     const search   = document.getElementById("acctSearch");
     const count    = document.getElementById("acctCount");
+    const label    = document.getElementById("sec-accounts");
 
-    if(allAccounts.length === 0){ switcher.style.display = "none"; return; }
+    if(allAccounts.length === 0){
+      switcher.style.display = "none";
+      if (label) label.style.display = "none";
+      return;
+    }
     switcher.style.display = "flex";
+    if (label) label.style.display = "block";
     count.textContent = "(" + allAccounts.length + ")";
     search.style.display = allAccounts.length >= 5 ? "" : "none";
 
@@ -1806,7 +1817,7 @@ async function refreshAccountTabs() {
   } catch(_) {}
 }
 
-async function switchAccount(no) {
+async function switchAccount(no, opts) {
   activeAccount = String(no);
   localStorage.setItem(LS_KEY_ACCT, activeAccount);
   document.querySelectorAll(".acct-tab").forEach(t => t.classList.remove("active"));
@@ -1816,6 +1827,10 @@ async function switchAccount(no) {
     const res = await fetch(API_URL + "?account=" + no + "&_=" + Date.now());
     render(await res.json());
   } catch(_) {}
+  if (opts && opts.scrollToOverview && window.matchMedia("(max-width: 700px)").matches) {
+    const target = document.getElementById("sec-overview");
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 // Search filter — re-render tabs as user types
@@ -2250,7 +2265,7 @@ document.getElementById("tokenModal").addEventListener("click", e => {
   const items = document.querySelectorAll(".mob-nav-item");
   if (!items.length) return;
 
-  const sections = ["sec-overview","sec-kpis","sec-analytics","sec-stats"]
+  const sections = ["sec-accounts","sec-overview","sec-kpis","sec-analytics","sec-stats"]
     .map(id => document.getElementById(id))
     .filter(Boolean);
 
