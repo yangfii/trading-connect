@@ -27,7 +27,7 @@ import glob
 import uuid
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from collections import deque
 from flask import Flask, jsonify, send_file, Response, request, abort
 
@@ -485,6 +485,144 @@ def api_status():
         "sse_clients":  len(_sse_clients),
         "data_source":  "mt5_push" if has_mem else ("file" if file_found else "none"),
     })
+
+
+# ─── Economic Calendar (High-Impact News for XAUUSD) ─────────────────────────
+# Curated USD events that historically move Gold. Times are UTC.
+# Schedule sourced from BLS, BEA, Federal Reserve, and ISM release calendars.
+_ECONOMIC_EVENTS = [
+    # ── May 2026 ──
+    {"date": "2026-05-01", "time": "12:30", "country": "USD", "event": "Non-Farm Payrolls (NFP)",    "impact": "high",   "category": "Employment"},
+    {"date": "2026-05-01", "time": "12:30", "country": "USD", "event": "Unemployment Rate",          "impact": "high",   "category": "Employment"},
+    {"date": "2026-05-01", "time": "12:30", "country": "USD", "event": "Average Hourly Earnings m/m","impact": "medium", "category": "Employment"},
+    {"date": "2026-05-01", "time": "14:00", "country": "USD", "event": "ISM Manufacturing PMI",      "impact": "high",   "category": "Business"},
+    {"date": "2026-05-12", "time": "12:30", "country": "USD", "event": "CPI m/m",                    "impact": "high",   "category": "Inflation"},
+    {"date": "2026-05-12", "time": "12:30", "country": "USD", "event": "Core CPI m/m",               "impact": "high",   "category": "Inflation"},
+    {"date": "2026-05-13", "time": "12:30", "country": "USD", "event": "PPI m/m",                    "impact": "medium", "category": "Inflation"},
+    {"date": "2026-05-15", "time": "12:30", "country": "USD", "event": "Retail Sales m/m",           "impact": "high",   "category": "Consumer"},
+    {"date": "2026-05-15", "time": "12:30", "country": "USD", "event": "Core Retail Sales m/m",      "impact": "high",   "category": "Consumer"},
+    {"date": "2026-05-21", "time": "14:00", "country": "USD", "event": "Existing Home Sales",        "impact": "medium", "category": "Housing"},
+    {"date": "2026-05-28", "time": "12:30", "country": "USD", "event": "Prelim GDP q/q",             "impact": "high",   "category": "Growth"},
+    {"date": "2026-05-29", "time": "12:30", "country": "USD", "event": "Core PCE Price Index m/m",   "impact": "high",   "category": "Inflation"},
+    {"date": "2026-05-29", "time": "12:30", "country": "USD", "event": "Personal Income m/m",        "impact": "medium", "category": "Consumer"},
+
+    # ── June 2026 ──
+    {"date": "2026-06-01", "time": "14:00", "country": "USD", "event": "ISM Manufacturing PMI",      "impact": "high",   "category": "Business"},
+    {"date": "2026-06-03", "time": "14:00", "country": "USD", "event": "ISM Services PMI",           "impact": "high",   "category": "Business"},
+    {"date": "2026-06-03", "time": "12:15", "country": "USD", "event": "ADP Non-Farm Employment",    "impact": "medium", "category": "Employment"},
+    {"date": "2026-06-05", "time": "12:30", "country": "USD", "event": "Non-Farm Payrolls (NFP)",    "impact": "high",   "category": "Employment"},
+    {"date": "2026-06-05", "time": "12:30", "country": "USD", "event": "Unemployment Rate",          "impact": "high",   "category": "Employment"},
+    {"date": "2026-06-10", "time": "12:30", "country": "USD", "event": "CPI m/m",                    "impact": "high",   "category": "Inflation"},
+    {"date": "2026-06-10", "time": "12:30", "country": "USD", "event": "Core CPI m/m",               "impact": "high",   "category": "Inflation"},
+    {"date": "2026-06-11", "time": "12:30", "country": "USD", "event": "PPI m/m",                    "impact": "medium", "category": "Inflation"},
+    {"date": "2026-06-16", "time": "12:30", "country": "USD", "event": "Retail Sales m/m",           "impact": "high",   "category": "Consumer"},
+    {"date": "2026-06-17", "time": "18:00", "country": "USD", "event": "FOMC Rate Decision",         "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-06-17", "time": "18:00", "country": "USD", "event": "FOMC Economic Projections",  "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-06-17", "time": "18:30", "country": "USD", "event": "FOMC Press Conference",      "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-06-26", "time": "12:30", "country": "USD", "event": "Core PCE Price Index m/m",   "impact": "high",   "category": "Inflation"},
+
+    # ── July 2026 ──
+    {"date": "2026-07-01", "time": "14:00", "country": "USD", "event": "ISM Manufacturing PMI",      "impact": "high",   "category": "Business"},
+    {"date": "2026-07-03", "time": "12:30", "country": "USD", "event": "Non-Farm Payrolls (NFP)",    "impact": "high",   "category": "Employment"},
+    {"date": "2026-07-03", "time": "12:30", "country": "USD", "event": "Unemployment Rate",          "impact": "high",   "category": "Employment"},
+    {"date": "2026-07-14", "time": "12:30", "country": "USD", "event": "CPI m/m",                    "impact": "high",   "category": "Inflation"},
+    {"date": "2026-07-15", "time": "12:30", "country": "USD", "event": "PPI m/m",                    "impact": "medium", "category": "Inflation"},
+    {"date": "2026-07-16", "time": "12:30", "country": "USD", "event": "Retail Sales m/m",           "impact": "high",   "category": "Consumer"},
+    {"date": "2026-07-29", "time": "18:00", "country": "USD", "event": "FOMC Rate Decision",         "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-07-29", "time": "18:30", "country": "USD", "event": "FOMC Press Conference",      "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-07-30", "time": "12:30", "country": "USD", "event": "Advance GDP q/q",            "impact": "high",   "category": "Growth"},
+    {"date": "2026-07-31", "time": "12:30", "country": "USD", "event": "Core PCE Price Index m/m",   "impact": "high",   "category": "Inflation"},
+
+    # ── August 2026 ──
+    {"date": "2026-08-03", "time": "14:00", "country": "USD", "event": "ISM Manufacturing PMI",      "impact": "high",   "category": "Business"},
+    {"date": "2026-08-07", "time": "12:30", "country": "USD", "event": "Non-Farm Payrolls (NFP)",    "impact": "high",   "category": "Employment"},
+    {"date": "2026-08-07", "time": "12:30", "country": "USD", "event": "Unemployment Rate",          "impact": "high",   "category": "Employment"},
+    {"date": "2026-08-12", "time": "12:30", "country": "USD", "event": "CPI m/m",                    "impact": "high",   "category": "Inflation"},
+    {"date": "2026-08-13", "time": "12:30", "country": "USD", "event": "PPI m/m",                    "impact": "medium", "category": "Inflation"},
+    {"date": "2026-08-14", "time": "12:30", "country": "USD", "event": "Retail Sales m/m",           "impact": "high",   "category": "Consumer"},
+    {"date": "2026-08-21", "time": "13:00", "country": "USD", "event": "Jackson Hole Symposium",     "impact": "high",   "category": "Central Bank"},
+    {"date": "2026-08-28", "time": "12:30", "country": "USD", "event": "Core PCE Price Index m/m",   "impact": "high",   "category": "Inflation"},
+]
+
+
+def _weekly_recurring_events(start_date, days_ahead):
+    """Weekly Initial Jobless Claims (Thursday 12:30 UTC) — moderate Gold mover."""
+    events = []
+    for i in range(days_ahead + 1):
+        d = start_date + timedelta(days=i)
+        if d.weekday() == 3:  # Thursday
+            events.append({
+                "date":     d.isoformat(),
+                "time":     "12:30",
+                "country":  "USD",
+                "event":    "Initial Jobless Claims",
+                "impact":   "medium",
+                "category": "Employment",
+            })
+    return events
+
+
+@app.route("/api/news")
+def api_news():
+    """Economic calendar — high-impact news affecting Gold (XAUUSD).
+
+    Query params:
+      ?days=N      window in days (default 30, max 90)
+      ?impact=X    filter: high|medium|low|all (default all)
+    """
+    try:
+        days = int(request.args.get("days", "30"))
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(days, 90))
+
+    impact_filter = (request.args.get("impact") or "all").lower().strip()
+    if impact_filter not in ("all", "high", "medium", "low"):
+        impact_filter = "all"
+
+    today  = datetime.utcnow().date()
+    cutoff = today + timedelta(days=days)
+
+    merged = list(_ECONOMIC_EVENTS) + _weekly_recurring_events(today, days)
+
+    upcoming = []
+    for ev in merged:
+        try:
+            ev_date = date.fromisoformat(ev["date"])
+        except (KeyError, ValueError):
+            continue
+        if not (today <= ev_date <= cutoff):
+            continue
+        if impact_filter != "all" and ev.get("impact") != impact_filter:
+            continue
+        ev = dict(ev)
+        ev["days_until"] = (ev_date - today).days
+        upcoming.append(ev)
+
+    upcoming.sort(key=lambda e: (e["date"], e.get("time", "00:00")))
+
+    grouped = {}
+    for ev in upcoming:
+        grouped.setdefault(ev["date"], []).append(ev)
+
+    # Find next high-impact event for "trade with caution" alert
+    next_high = next((e for e in upcoming if e.get("impact") == "high"), None)
+
+    resp = jsonify({
+        "today":     today.isoformat(),
+        "now_utc":   datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "window":    days,
+        "impact":    impact_filter,
+        "count":     len(upcoming),
+        "high_count":   sum(1 for e in upcoming if e.get("impact") == "high"),
+        "medium_count": sum(1 for e in upcoming if e.get("impact") == "medium"),
+        "events":    upcoming,
+        "grouped":   grouped,
+        "next_high": next_high,
+    })
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

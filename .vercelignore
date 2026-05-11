@@ -3,6 +3,7 @@
 *.ex5
 *.bat
 *.py
+!api/**/*.py
 *.json.bak
 compile_log.txt
 gold_performance.json
