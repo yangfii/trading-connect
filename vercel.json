@@ -1,6 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/gold_dashboard" }
+    { "source": "/",     "destination": "/gold_dashboard" },
+    { "source": "/news", "destination": "/news.html" }
   ]
 }
